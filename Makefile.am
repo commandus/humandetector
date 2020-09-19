@@ -1,0 +1,42 @@
+SUBDIRS = .
+ACLOCAL_AMFLAGS = -I m4
+AM_CXXFLAGS=-std=c++11 
+
+commoncppflags = -Ithird_party
+GEN = 
+
+#
+#	Exclude generated sources from distribution
+#
+nodist_human_detector_SOURCES = $(GEN)
+BUILT_SOURCES = $(GEN)
+CLEANFILES = $(GEN)
+
+#
+# Binaries
+#
+bin_PROGRAMS = human-detector
+
+nobase_dist_include_HEADERS = \
+	platform.h \
+	third_party/argtable3/argtable3.h \
+	third_party/nlohmann/json.hpp \
+	errlist.h daemonize.h
+
+commonlibs = -L/usr/local/lib 
+
+human_detector_SOURCES = \
+	human-detector.cpp errlist.cpp \
+	daemonize.cpp  \
+	third_party/argtable3/argtable3.c
+
+human_detector_LDADD = $(commonlibs)
+human_detector_CPPFLAGS = $(commoncppflags)
+
+#
+# Configs, readme, CMake etc.
+#
+configdir = $(datadir)
+dist_config_DATA = \
+   autogen.sh CMakeLists.txt CODE_OF_CONDUCT.md CONTRIBUTING.md COPYING HISTORY LICENSE README.md TODO \
+   third_party/argtable3/README
