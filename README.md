@@ -57,3 +57,12 @@ cmake ..
 make
 cpack
 ```
+
+## Debug
+
+### USB idenifiers
+
+New USB device found, idVendor=16d0, idProduct=087e, bcdDevice= 1.00
+New USB device strings: Mfr=1, Product=2, SerialNumber=0
+Product: Digispark Serial
+Manufacturer: digistump.com

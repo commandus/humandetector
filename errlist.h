@@ -1,11 +1,13 @@
 #define OK                 					0
 #define ERR_CODE_COMMAND_LINE		      -500
-#define ERR_CODE_GET_DEVICE			      -501
-#define ERR_CODE_BAD_STATUS		          -502
+#define ERR_CODE_OPEN_DEVICE		      -501
+#define ERR_CODE_CLOSE_DEVICE		      -502
+#define ERR_CODE_BAD_STATUS		          -503
 
 
 #define ERR_COMMAND_LINE        "Wrong parameter(s)"
-#define ERR_GET_DEVICE          "Error get device "
+#define ERR_OPEN_DEVICE         "Error open device "
+#define ERR_CLOSE_DEVICE        "Error open device "
 #define ERR_BAD_STATUS          "Bad status"
 
 #define MSG_INTERRUPTED 		"Interrupted "

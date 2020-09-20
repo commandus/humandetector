@@ -18,15 +18,14 @@ CLEANFILES = $(GEN)
 bin_PROGRAMS = human-detector
 
 nobase_dist_include_HEADERS = \
-	platform.h \
+	platform.h utiltty.h \
 	third_party/argtable3/argtable3.h \
-	third_party/nlohmann/json.hpp \
 	errlist.h daemonize.h
 
 commonlibs = -L/usr/local/lib 
 
 human_detector_SOURCES = \
-	human-detector.cpp errlist.cpp \
+	human-detector.cpp utiltty.cpp errlist.cpp \
 	daemonize.cpp  \
 	third_party/argtable3/argtable3.c
 

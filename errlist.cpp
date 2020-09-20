@@ -1,11 +1,12 @@
 #include <string.h>
 #include "errlist.h"
 
-#define ERR_COUNT 3
+#define ERR_COUNT 4
 
 static const char* errlist[ERR_COUNT] = {
   ERR_COMMAND_LINE,
-  ERR_GET_DEVICE,
+  ERR_OPEN_DEVICE,
+  ERR_CLOSE_DEVICE,
   ERR_BAD_STATUS
 };
 
