@@ -256,12 +256,12 @@ static void putTemperature(
     case DEG_C:
         std::cout << options.currentTime << "\t" 
           << std::fixed << std::setprecision(2)
-          << (temperatureK100 - 27315) / 100  << std::endl;
+          << (temperatureK100 - 27315) / 100.0  << std::endl;
       break;
     default:
         std::cout << options.currentTime << "\t" 
           << std::fixed << std::setprecision(2)
-          << temperatureK100 / 100  << std::endl;
+          << temperatureK100 / 100.0  << std::endl;
   }
 }
 
