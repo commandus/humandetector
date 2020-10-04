@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "utiltty.h"
+#include "utildate.h"
 
 #ifdef _MSC_VER
 #define DEF_DEVICE_PATH "COM1"
@@ -21,11 +22,19 @@
 #include "errlist.h"
 
 const std::string progname = "human-detector";
-#define  DEF_CONFIG_FILE_NAME ".human-detector"
+#define DEF_CONFIG_FILE_NAME ".human-detector"
+#define DEF_TIME_FORMAT      "%F %T"
 
 enum DEGREES {
   DEG_K = 0,
   DEG_C = 1
+};
+
+enum MODE {
+  MODE_IR = 0,
+  MODE_AMBIENT = 1,
+  MODE_TICK = 2,
+  MODE_FILE = 3
 };
 
 class DetectorOptions {
@@ -36,17 +45,24 @@ class DetectorOptions {
     int temperature0;
     int temperature1;
     int dt;
-    DEGREES degrees;
+    enum DEGREES degrees;
     int delay;  // ms
     int verbosity;
     time_t currentTime;
     time_t startTime;
     time_t sentTime;
+    int sentTemperature;
+    bool printMaxOnly;
+    bool reconnect;
+    enum MODE mode;
+    std::string timeFormat;
     int maxT;
     DetectorOptions() :
       fd(0), stopped(false), path(""), temperature0(32), temperature1(42), dt(1),
-      degrees(DEG_K), delay(0), verbosity(0), currentTime(0), startTime(0), 
-      sentTime(0), maxT(0)
+      degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
+      sentTime(0), sentTemperature(0), 
+      printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
+      maxT(0)
     {
     }
 };
@@ -117,14 +133,20 @@ int parseCmd
   struct arg_int *a_window = arg_int0("s", "seconds", "<number>", "Default 1");
   // delay
   struct arg_int *a_delay = arg_int0("y", "delay", "<ms>", "delay to read, C. Default 0");
-  struct arg_str *a_degrees = arg_str0("g", "degrees", "K or C", "K- Kelvin (default), C- Celcius");
+  struct arg_str *a_degrees = arg_str0("g", "degrees", "K or C", "K- Kelvin, C- Celcius (default)");
+  struct arg_str *a_mode = arg_str0("m", "mode", "i, a, t, f", "ir- infrared sensor, ambient- internal sensor, tick- counter value, file- read from the file");
+  struct arg_lit *a_printMaxOnly = arg_lit0("1", NULL, "output max temperature only(no output every 1s when temperature growing)");
+  struct arg_lit *a_reconnect = arg_lit0("r", "reconnect", "re-open COM port on error");
+  struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "Output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
+
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
 	struct arg_lit *a_help = arg_lit0("?", "help", "Show this help");
 	struct arg_end *a_end = arg_end(20);
 
 	void* argtable[] = { 
 		a_path, a_t0, a_t1, a_window,
-    a_degrees, a_delay, a_verbosity, a_help, a_end 
+    a_degrees, a_mode, a_printMaxOnly, a_reconnect, a_timeFormat,
+    a_delay, a_verbosity, a_help, a_end 
 	};
 
 	int nerrors;
@@ -151,12 +173,35 @@ int parseCmd
      if (d.length() > 0) {
        switch (d[0])
        {
-       case 'C':
-       case 'c':
-          detectorOptions.degrees = DEG_C;
+       case 'K':
+       case 'k':
+          detectorOptions.degrees = DEG_K;
           break;
        default:
-          detectorOptions.degrees = DEG_K;
+          break;
+       }
+     }
+  }
+
+  if (a_mode->count) {
+     std::string d = *a_mode->sval;
+     if (d.length() > 0) {
+       // i, a, t, f
+       switch (d[0])
+       {
+       case 'A':
+       case 'a':
+          detectorOptions.mode = MODE_AMBIENT;
+          break;
+       case 'T':
+       case 't':
+          detectorOptions.mode = MODE_TICK;
+          break;
+       case 'F':
+       case 'f':
+          detectorOptions.mode = MODE_FILE;
+          break;
+       default:
           break;
        }
      }
@@ -164,6 +209,13 @@ int parseCmd
 
   if (detectorOptions.path.empty()) {
     detectorOptions.path = DEF_DEVICE_PATH;
+  }
+
+  detectorOptions.printMaxOnly = a_printMaxOnly->count > 0;
+  detectorOptions.reconnect = a_reconnect->count > 0;
+
+  if (a_timeFormat->count) {
+     detectorOptions.timeFormat = *a_timeFormat->sval;
   }
 
   detectorOptions.verbosity = a_verbosity->count;
@@ -185,7 +237,7 @@ int parseCmd
     detectorOptions.dt = *a_window->ival;
   }
 
-  if (detectorOptions.dt <= 0) {
+  if (detectorOptions.dt < 0) {
     std::cerr << "Time window must be great or equil 0 seconds." << std::endl;
     nerrors++;
   }
@@ -227,7 +279,20 @@ static size_t sendRequestObjectTemperature(
     usleep(options.delay * 1000);
 #endif    
   }
-  char c = '0';
+  char c;
+  switch (options.mode) {
+  case MODE_AMBIENT:
+    c = '1';
+    break;
+  case MODE_TICK:
+    c = '2';
+    break;
+  case MODE_FILE:
+    return 0;
+  default:
+    c = '0';
+    break;
+  }
   return write(options.fd, &c, 1);
 }
 
@@ -239,13 +304,31 @@ static size_t parseObjectTemp(
   std::string s = buf.str();
   size_t l = s.length();
   if (l > 2) {
-    if (s[l - 2] == '\r' && s[l - 1] == '\n') {
-      s.erase(l - 2);
+    if (s[l - 1] == '\n') {
+      size_t l2d;
+      if (s[l - 2] == '\r') {
+        l2d = l - 2;
+      } else {
+        l2d = l - 1;
+      }
+      s.erase(l2d);
       retval = atoi(s.c_str());
       return l;
     }
   }
   return 0;
+}
+
+static std::string getStartTimeStamp(
+  const DetectorOptions &options
+) {
+  if (options.timeFormat.empty()) {
+    std::stringstream ss;
+    ss << std::dec << options.startTime;
+    return ss.str();
+  }
+
+  return ltimeString(options.startTime, options.timeFormat);
 }
 
 static void putTemperature(
@@ -254,12 +337,14 @@ static void putTemperature(
 ) {
   switch (options.degrees) {
     case DEG_C:
-        std::cout << options.currentTime << "\t" 
+        std::cout 
+          << getStartTimeStamp(options) << "\t" 
           << std::fixed << std::setprecision(2)
           << (temperatureK100 - 27315) / 100.0  << std::endl;
       break;
     default:
-        std::cout << options.currentTime << "\t" 
+        std::cout 
+          << getStartTimeStamp(options) << "\t" 
           << std::fixed << std::setprecision(2)
           << temperatureK100 / 100.0  << std::endl;
   }
@@ -271,15 +356,18 @@ static void processWindow(
 )
 {
   if (options.dt <= 0) {
+    // just log data
     putTemperature(options, temperature);
     return;
   }
+
   // temperature is too low or too high. It is not a human.
-  if (temperature < options.maxT) {
+  if (temperature < options.temperature0 || temperature > options.temperature1) {
     if (options.startTime > 0) {
       // Object is lost
       // Report about last object
-      putTemperature(options, temperature);
+      // options.maxT is correct value (because startTime > 0)
+      putTemperature(options, options.maxT);
     } else {
       // Did not see any object yet
       return;
@@ -287,13 +375,16 @@ static void processWindow(
     // reset time
     options.startTime = 0;
     options.sentTime = 0;
+    options.sentTemperature = 0;
     // reset max
-    options.maxT = options.temperature0 - 1;
+    options.maxT = 0;
     return;
   }
+
   // temperature is OK
+  
   if (options.startTime == 0) {
-    // New measurement
+    // New measurement, just started
     options.startTime = time(NULL);
     options.maxT = temperature;
     // Ready for new measurements
@@ -302,25 +393,37 @@ static void processWindow(
 
   // Have old measurements
 
-  // Store new max temperature
-  if (options.maxT < temperature)
+  if (temperature > options.maxT) {
+    // Store new max temperature
     options.maxT = temperature;
-  // Check is it time to report
+  }
+
+  if (options.printMaxOnly) {
+    // output if object is lost only
+    return;
+  }
+
   if (options.sentTime == 0) {
+    // not sent yet
+    // Check is it time to report
     if (options.currentTime - options.startTime > options.dt) {
-      // need to report
-      putTemperature(options, temperature);
+      // need to report first time
+      putTemperature(options, options.maxT);
       // remember time of last report
-      options.sentTime = options.startTime;
+      options.sentTime = options.currentTime;
+      options.sentTemperature = options.maxT; // remember, check on flush
     }
   } else {
-    // Sent one or more report(s) already.
+    // Sent one or more report(s) already
     if (options.currentTime - options.sentTime > options.dt) {
-      // need to re-report
-      putTemperature(options, temperature);
+        // need to re-report if temperature is higher
+        if (options.maxT > options.sentTemperature) {
+          putTemperature(options, options.maxT);
+          options.sentTemperature = options.maxT; // remember, check on flush
+        }
+      }
       // remember time of last report
-      options.sentTime = options.startTime;
-    }
+      options.sentTime = options.currentTime;
   }
 }
 
@@ -330,13 +433,35 @@ static void readDevice(
 {
 	std::stringstream buf;
 	int c = 0;
-  options.startTime = time(NULL);
-  options.maxT = options.temperature0 - 1;
+  options.startTime = 0;
+  options.maxT = 0;
   sendRequestObjectTemperature(options);
 	while (!options.stopped) {
 		int r = read(options.fd, &c, 1);
-		if (options.verbosity > 2) {
-			std::cerr << (char) c;
+    switch (r)
+    {
+    case -1:  // error
+    case 0:   // EOF
+      // lost everything
+      buf.clear();
+      // try to re-open file
+      if (options.reconnect) {
+        if (options.fd) {
+          closeDevice(options.fd);
+        }
+        options.fd = openDevice(options.path);
+        continue;
+      } else {
+        // exit gracefully
+        options.stopped = true;
+        break;
+      }
+      break;
+    default:
+      if (options.verbosity > 2) {
+        std::cerr << (char) c;
+      }
+      break;
     }
 
     buf.put(c);

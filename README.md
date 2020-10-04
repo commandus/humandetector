@@ -1,6 +1,6 @@
 # human-detector
 
-Опрашиваает USB COM port Digispark Attiny85.
+Опрашивает USB COM port Digispark Attiny85.
 
 Рабтает с заданной задержкой, равной временному окну. 
 
@@ -22,19 +22,18 @@
 
 В Windows нужно устанавливать драйвер. В Linux, в часности, в Ubuntu, нужно прописывать правила USB.
 
-Программа может послать один из трех символов в COM порт:
+Программа может послать один из трех символов в COM порт (в скобках значение опции -m, --mode):
 
-- '0' запрос температуры ИК датчика
-- '1' запрос температуры окружающей среды (корпуса датчика)
-- '2' запрос числа тиков. Используется для отладки
+- '0' запрос температуры ИК датчика (ir)
+- '1' запрос температуры окружающей среды (корпуса датчика) (ambient)
+- '2' запрос числа тиков. Используется для отладки (tick)
+- ничего не отправлять (file)
 
 При любом запросе включаестя или выключается второй светодиод. Первый светодиод постоянно горит при полдключении к USB порту.
 
 В ответ по COM порту приходит температура (или тики).
 
-Температура в Кельвинах, значение умножено на 100.
-
-Загрузка кода делается из Ardiuno IDE.
+Температура в Кельвинах, значение умноженo на 100.
 
 У меня где-то в KDE иногда начинает возникать ошибка при подключении USB Digispark Attiny85, при этом устройство ошибочно определяется как ISDN модем.
 
@@ -96,12 +95,33 @@ Temperature reader
   -h, --t1=<number>         hi temperature threshold, C. Default 42
   -s, --seconds=<number>    Default 1
   -g, --degrees=K or C      K- Kelvin (default), C- Celcius
-  -y, --delay=<ms>          delay to read, C. Default 0
+  -m, --mode=i, a, t or f   ir- infrared sensor, ambient- internal sensor, tick- counter value, file- read from the file
+  -y, --delay=<ms>          delay to read, ms. Default 0
+  -1                        output max temperature only(no output every 1s when temperature growing)
+  -t, --timeformat=<format> Output time format, e.g. "%F %T". Default prints seconds since Unix epoch
   -v, --verbose             Set verbosity level
   -?, --help                Show this help
 ```
 
-## Сблрка
+Ошибки при записи в устройство игнорируются.
+
+Опция -y, --delay=<ms> задает задержку в миллисекундах перед чтением значения из устройства или файла, и полезга при отладке с чтением данных из тестовых файлов.
+
+Опция -1 заставляет выводить только одну строку с максимальной измеренной температурой. Поэтому, пока объект не перестает видиться термометром, данные не будут переданы. 
+Без этой опции, по умолчанию, строка с температурой выдается минимум через секунду (или другой заданный промежуток времени).
+
+
+Опция -t, --timeformat задает формат штампа времени. Если опция не задана, выдается число секунд с 1 января 1970 года. 
+
+Подходящие форматы:
+
+- "%F %T%Z" с поясным временем
+- "%F %T" без указания пояса
+- "%FT%T%Z" тоже
+
+Штамп времени выводит локальное время (с учетом временного пояса).
+
+## Сборка
 
 ### Linux
 
@@ -122,11 +142,48 @@ make
 cpack
 ```
 
-## Debug
+## Зависимости
 
-### USB idenifiers
+argtable3 
+
+Copyright (C) 1998-2001,2003-2011,2013 Stewart Heitmann <sheitmann@users.sourceforge.net> All rights reserved.
+
+strptime for Windows
+
+Copyright (c) 1999 Kungliga Tekniska Hï¿œgskolan (Royal Institute of Technology, Stockholm, Sweden). All rights reserved.
+
+
+## USB idenifiers
+
+При передаяе управления библиотеке USB Serial Port:
+
+- Вендор 16d0
+- Продукт 087e
 
 New USB device found, idVendor=16d0, idProduct=087e, bcdDevice= 1.00
 New USB device strings: Mfr=1, Product=2, SerialNumber=0
 Product: Digispark Serial
 Manufacturer: digistump.com
+
+## Тесты
+
+Тестовый файл содержит строки десятичных чисел- значений температуры в градусах Кельвина, умноженных на 100 и выглядит так:
+
+```
+09815
+29815
+29815
+29815
+...
+```
+
+Для тестовых файлов нужно 
+
+- указать путь к файлу (безымянная опция)
+- задать задержку (опция -y) в миллисекундах
+
+```
+./human-detector -m file -y 100 -t "%F %T" t1.txt
+```
+
+Опция -t "%F %T"  задает формат строки времени в текущем часовом поясе, например, 2020-10-04 14:02:02.
