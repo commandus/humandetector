@@ -2,7 +2,6 @@
 #define PLATFORM_H 1
 
 #ifdef _MSC_VER
-#include "strptime.h"
 #define	SYSLOG(msg)
 #define OPENSYSLOG()
 #define CLOSESYSLOG()

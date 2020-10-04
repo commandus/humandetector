@@ -6,6 +6,7 @@ INCLUDE_DIRECTORIES("third_party")
 
 set(HUMAN_DETECTOR_SRC 
 	human-detector.cpp errlist.cpp daemonize.cpp utiltty.cpp
+	strptime.cpp utildate.cpp
 	third_party/argtable3/argtable3.c
 )
 add_executable(human-detector ${HUMAN_DETECTOR_SRC})
