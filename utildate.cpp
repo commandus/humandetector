@@ -2,6 +2,8 @@
 #include <time.h>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
+#include <iomanip>
 #include "platform.h"
 
 #ifndef _MSC_VER
@@ -14,6 +16,7 @@ const static char *dateformat = "%FT%T";
 
 std::string ltimeString(
 	time_t value,
+	int ms,
 	const std::string &format
 ) {
 	if (!value)
@@ -22,7 +25,13 @@ std::string ltimeString(
 	localtime_s(&tm, &value);
 	char dt[64];
 	strftime(dt, sizeof(dt), format.c_str(), &tm);
-	return std::string(dt);
+	if (ms == -1)
+		return std::string(dt);
+	else {
+		std::stringstream ss;
+		ss << dt << "." << std::setw(3) << std::setfill('0') << ms;
+		return ss.str();
+	}
 }
 
 /**

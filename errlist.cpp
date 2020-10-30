@@ -1,13 +1,20 @@
 #include <string.h>
 #include "errlist.h"
 
-#define ERR_COUNT 4
+#define ERR_COUNT 11
 
 static const char* errlist[ERR_COUNT] = {
   ERR_COMMAND_LINE,
   ERR_OPEN_DEVICE,
   ERR_CLOSE_DEVICE,
-  ERR_BAD_STATUS
+  ERR_BAD_STATUS,
+  ERR_DB_NOTCONNECTED,
+  ERR_DB_CREATE_DESCRIPTOR,
+  ERR_DB_CONNECT,
+  ERR_DB_EXEC_QUERY,
+  ERR_DB_GET_RESULT,
+  ERR_DB_FETCH_RESULT,
+  ERR_DB_EMPTY
 };
 
 const char *strerror_humandetector(

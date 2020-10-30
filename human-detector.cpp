@@ -5,6 +5,8 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <cmath>
+#include <sys/time.h>
 
 #include "utiltty.h"
 #include "utildate.h"
@@ -23,6 +25,8 @@
 
 const std::string progname = "human-detector";
 #define DEF_CONFIG_FILE_NAME ".human-detector"
+#define DEF_EMISSIVITY_K     "0.92"
+#define DEF_EMISSIVITY_COEF   0.92
 #define DEF_TIME_FORMAT      "%F %T"
 
 enum DEGREES {
@@ -37,6 +41,9 @@ enum MODE {
   MODE_FILE = 3
 };
 
+#define DEF_TEMPERATURE_THRESHOLD_C_MIN 30
+#define DEF_TEMPERATURE_THRESHOLD_C_MAX 42
+
 class DetectorOptions {
   public:
     int fd;
@@ -50,6 +57,7 @@ class DetectorOptions {
     int verbosity;
     time_t currentTime;
     time_t startTime;
+    int startTimeMs;
     time_t sentTime;
     int sentTemperature;
     bool printMaxOnly;
@@ -57,12 +65,14 @@ class DetectorOptions {
     enum MODE mode;
     std::string timeFormat;
     int maxT;
+    int minT;
+    double emissivityK;
     DetectorOptions() :
-      fd(0), stopped(false), path(""), temperature0(32), temperature1(42), dt(1),
+      fd(0), stopped(false), path(""), temperature0(DEF_TEMPERATURE_THRESHOLD_C_MIN), temperature1(DEF_TEMPERATURE_THRESHOLD_C_MAX), dt(1),
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
       printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
-      maxT(0)
+      maxT(0), minT(0), emissivityK(0.92)
     {
     }
 };
@@ -111,6 +121,13 @@ void setSignalHandler()
 }
 #endif
 
+time_t time_ms(int &ms) {
+  struct timeval tp;
+  gettimeofday(&tp, NULL);
+  ms = tp.tv_usec / 1000;
+  return tp.tv_sec;
+}
+
 /**
  * Parse command line
  * Return 0- success
@@ -129,6 +146,7 @@ int parseCmd
   // temperature
   struct arg_int *a_t0 = arg_int0("l", "t0", "<number>", "lo temperature threshold, C. Default 32");
   struct arg_int *a_t1 = arg_int0("h", "t1", "<number>", "hi temperature threshold, C. Default 42");
+  struct arg_str *a_emissivity = arg_str0("e", "emissivity", "<float>", "emissivity coefficient 0..1, default " DEF_EMISSIVITY_K "");
   // time window
   struct arg_int *a_window = arg_int0("s", "seconds", "<number>", "Default 1");
   // delay
@@ -220,6 +238,13 @@ int parseCmd
 
   detectorOptions.verbosity = a_verbosity->count;
 
+  
+  if (a_emissivity->count) {
+    detectorOptions.emissivityK = atof(*a_emissivity->sval);
+  } else {
+    detectorOptions.emissivityK = DEF_EMISSIVITY_COEF;
+  }
+
   if (a_t0->count) {
      detectorOptions.temperature0 = *a_t0->ival;
   }
@@ -296,6 +321,7 @@ static size_t sendRequestObjectTemperature(
   return write(options.fd, &c, 1);
 }
 
+
 static size_t parseObjectTemp(
   int &retval,
   std::stringstream &buf
@@ -303,20 +329,42 @@ static size_t parseObjectTemp(
 {
   std::string s = buf.str();
   size_t l = s.length();
-  if (l > 2) {
-    if (s[l - 1] == '\n') {
-      size_t l2d;
-      if (s[l - 2] == '\r') {
-        l2d = l - 2;
-      } else {
-        l2d = l - 1;
-      }
-      s.erase(l2d);
-      retval = atoi(s.c_str());
-      return l;
+  if (l <= 2)
+    return 0;
+  if (s[l - 1] == '\n') {
+    size_t l2d;
+    if (s[l - 2] == '\r') {
+      l2d = l - 2;
+    } else {
+      l2d = l - 1;
     }
+    s.erase(l2d);
+    retval = atoi(s.c_str());
+    return l;
   }
   return 0;
+}
+
+
+static size_t parseObjectTemp2(
+  int &retval,
+  std::stringstream &buf
+) 
+{
+  std::string s = buf.str();
+  size_t l = s.find('\n');
+  if (l == std::string::npos)
+    return 0;
+  
+  int l2d = 0;
+  if ((l > 1) && (s[l - 1] == '\r')) {
+      l2d = l - 1;
+  } else {
+      l2d = l;
+  }
+  s.erase(l2d);
+  retval = atoi(s.substr(0, l2d).c_str());
+  return l2d;
 }
 
 static std::string getStartTimeStamp(
@@ -324,29 +372,58 @@ static std::string getStartTimeStamp(
 ) {
   if (options.timeFormat.empty()) {
     std::stringstream ss;
-    ss << std::dec << options.startTime;
+    ss << std::dec << options.startTime 
+    << "." << options.startTimeMs;
     return ss.str();
   }
 
-  return ltimeString(options.startTime, options.timeFormat);
+  return ltimeString(options.startTime, options.startTimeMs, options.timeFormat);
+}
+
+/**
+ * @param value
+ * @return
+ * @see "https://www.apogeeinstruments.com/emissivity-correction-for-infrared-radiometer-sensors/"
+ */
+static int calcT(
+  int temperatureSensor100K,
+  int temperatureBackground100K,
+  double &emissivityK
+)
+{
+  double temperatureSensor = temperatureSensor100K / 100.0;
+  double temperatureBackground = temperatureBackground100K / 100.0;
+  return (int) round( 100. * sqrt(sqrt(
+          (temperatureSensor * temperatureSensor * temperatureSensor * temperatureSensor
+                  - (1 - emissivityK) * temperatureBackground * temperatureBackground * temperatureBackground * temperatureBackground)
+                  / emissivityK
+  )));
 }
 
 static void putTemperature(
   DetectorOptions &options,
-  int temperatureK100
+  int temperatureK100,
+  int temperatureMinK100
 ) {
+  double k = (calcT(temperatureK100, temperatureMinK100, options.emissivityK) - 27315) / 100.0;
   switch (options.degrees) {
     case DEG_C:
         std::cout 
           << getStartTimeStamp(options) << "\t" 
           << std::fixed << std::setprecision(2)
-          << (temperatureK100 - 27315) / 100.0  << std::endl;
+          << k << "\t" 
+          << (temperatureK100 - 27315) / 100.0 << "\t"
+          << (temperatureMinK100 - 27315) / 100.0  
+          << std::endl;
       break;
     default:
         std::cout 
           << getStartTimeStamp(options) << "\t" 
           << std::fixed << std::setprecision(2)
-          << temperatureK100 / 100.0  << std::endl;
+          << k << "\t"
+          << temperatureK100 / 100.0 << "\t" 
+          << temperatureMinK100 / 100.0  
+          << std::endl;
   }
 }
 
@@ -357,17 +434,21 @@ static void processWindow(
 {
   if (options.dt <= 0) {
     // just log data
-    putTemperature(options, temperature);
+    putTemperature(options, temperature, options.minT);
     return;
   }
 
   // temperature is too low or too high. It is not a human.
   if (temperature < options.temperature0 || temperature > options.temperature1) {
+    // process min
+    if (temperature < options.minT) {
+        options.minT = temperature;
+    }
     if (options.startTime > 0) {
       // Object is lost
       // Report about last object
       // options.maxT is correct value (because startTime > 0)
-      putTemperature(options, options.maxT);
+      putTemperature(options, options.maxT, options.minT);
     } else {
       // Did not see any object yet
       return;
@@ -378,6 +459,10 @@ static void processWindow(
     options.sentTemperature = 0;
     // reset max
     options.maxT = 0;
+    // reset min
+    options.minT = options.temperature1;
+    // reset ambient
+    // options.ambientT = 0;
     return;
   }
 
@@ -385,7 +470,7 @@ static void processWindow(
   
   if (options.startTime == 0) {
     // New measurement, just started
-    options.startTime = time(NULL);
+    options.startTime = time_ms(options.startTimeMs);
     options.maxT = temperature;
     // Ready for new measurements
     return;
@@ -408,7 +493,7 @@ static void processWindow(
     // Check is it time to report
     if (options.currentTime - options.startTime > options.dt) {
       // need to report first time
-      putTemperature(options, options.maxT);
+      putTemperature(options, options.maxT, options.minT);
       // remember time of last report
       options.sentTime = options.currentTime;
       options.sentTemperature = options.maxT; // remember, check on flush
@@ -418,7 +503,7 @@ static void processWindow(
     if (options.currentTime - options.sentTime > options.dt) {
         // need to re-report if temperature is higher
         if (options.maxT > options.sentTemperature) {
-          putTemperature(options, options.maxT);
+          putTemperature(options, options.maxT, options.minT);
           options.sentTemperature = options.maxT; // remember, check on flush
         }
       }
@@ -435,6 +520,7 @@ static void readDevice(
 	int c = 0;
   options.startTime = 0;
   options.maxT = 0;
+  options.minT = options.temperature1;
   sendRequestObjectTemperature(options);
 	while (!options.stopped) {
 		int r = read(options.fd, &c, 1);
@@ -473,7 +559,7 @@ static void readDevice(
       buf.clear(); // Clear state flags.
       buf.str(remains);
 
-      options.currentTime = time(NULL);
+      options.currentTime = time_ms(options.startTimeMs);
       processWindow(options, t);
       sendRequestObjectTemperature(options);
     }
