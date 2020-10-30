@@ -15,11 +15,12 @@ CLEANFILES = $(GEN)
 #
 # Binaries
 #
-bin_PROGRAMS = human-detector
+bin_PROGRAMS = human-detector sigur-last-card
 
 nobase_dist_include_HEADERS = \
 	platform.h utiltty.h \
 	strptime.h utildate.h \
+	wt-sigur.h \
 	third_party/argtable3/argtable3.h \
 	errlist.h daemonize.h
 
@@ -33,6 +34,15 @@ human_detector_SOURCES = \
 
 human_detector_LDADD = $(commonlibs)
 human_detector_CPPFLAGS = $(commoncppflags)
+
+sigur_last_card_SOURCES = \
+	sigur-last-card.cpp wt-sigur.cpp errlist.cpp \
+	daemonize.cpp \
+	strptime.cpp utildate.cpp \
+	third_party/argtable3/argtable3.c
+
+sigur_last_card_LDADD = $(commonlibs) -lmysqlclient
+sigur_last_card_CPPFLAGS = $(commoncppflags)
 
 #
 # Configs, readme, CMake etc.
