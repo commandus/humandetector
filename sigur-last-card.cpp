@@ -92,8 +92,8 @@ int parseCmd
   struct arg_int *a_area = arg_int0("a", "area", "<number>", "-1: any. Default 0");
   struct arg_int *a_direction = arg_int0("d", "direction", "<number>", "1- out, 2- in, 0- any. Default 2(in)");
 
-  struct arg_lit *a_reconnect = arg_lit0("r", "reconnect", "re-connect database on error");
-  struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "Output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
+  struct arg_lit *a_repeat = arg_lit0("r", "read", "read lines from stdin");
+  struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
 
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
 	struct arg_lit *a_help = arg_lit0("?", "help", "Show this help");
@@ -101,7 +101,7 @@ int parseCmd
 
 	void* argtable[] = { 
 		a_dbhost, a_dbuser, a_dbpasswd, a_dbport,
-    a_area, a_direction, a_reconnect, a_timeFormat,
+    a_area, a_direction, a_repeat, a_timeFormat,
     a_verbosity, a_help, a_end 
 	};
 
@@ -149,7 +149,8 @@ int parseCmd
     options.direction = DEF_DIRECTION;
   }
 
-  
+  options.repeatadly = a_repeat->count > 0;
+
   if (a_timeFormat->count) {
      options.timeFormat = *a_timeFormat->sval;
   } else {
@@ -162,7 +163,7 @@ int parseCmd
 			arg_print_errors(stderr, a_end, progname.c_str());
 		std::cerr << "Usage: " << progname << std::endl;
 		arg_print_syntax(stderr, argtable, "\n");
-		std::cerr << "Temperature reader" << std::endl;
+		std::cerr << "Sigur last card" << std::endl;
 		arg_print_glossary(stderr, argtable, "  %-25s %s\n");
 		arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 		return 1;
@@ -184,6 +185,31 @@ static std::string formatTime(
   return ltimeString(value, -1, options.timeFormat);
 }
 
+int run (
+  std::istream &strmin,
+  std::ostream &strmout,
+  SigurOptions &options
+) {
+    while (!options.stopped && strmin.good()) {
+      std::string line;
+      std::getline(strmin, line);
+      if (strmin.eof())
+        break;
+      time_t t;
+      int cardno = options.getLastSigurEmployee(t);
+      if (cardno < 0) {
+        if (cardno != ERR_CODE_DB_EMPTY) {
+          std::cerr << "Error " << cardno << ": " << strerror_humandetector(cardno) << std::endl;
+          // try to connect to the database
+          options.disconnect();
+          options.reconnect();
+        }
+      }
+      strmout << line << " --card " << cardno << " --timein " << t << std::endl;
+      strmout.flush();
+    }
+}
+
 int main(
   int argc,
 	char* argv[]
@@ -199,17 +225,23 @@ int main(
 #endif
 
   options.reconnect();
-  time_t t;
-  int cardno = options.getLastSigurEmployee(t);
-  if (cardno < 0) {
-    if (cardno != ERR_CODE_DB_EMPTY) {
-      std::cerr << "Error " << cardno << ": " << strerror_humandetector(cardno) << std::endl;
+  int c;
+  if (options.repeatadly) {
+    c = run(std::cin, std::cout, options);
+    if (c < 0) {
+      exit(c);
     }
-    exit(cardno);
+  } else {
+    time_t t;
+    c = options.getLastSigurEmployee(t);
+    if (c < 0) {
+      if (c != ERR_CODE_DB_EMPTY) {
+        std::cerr << "Error " << c << ": " << strerror_humandetector(c) << std::endl;
+      }
+      exit(c);
+    }
+    std::cout << c << "\t" << formatTime(options, t) << std::endl;
   }
-
-  std::cout << cardno << "\t" << formatTime(options, t) << std::endl;
-
-  return 0;
+  return OK;
 }
 

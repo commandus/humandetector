@@ -15,11 +15,16 @@ public:
 	int port;
 	int area;
 	int direction;
+	bool repeatadly;
 	std::string timeFormat;
 
 	SigurOptions();
 	SigurOptions(
-		const std::string &dbLog
+		bool repeatadly
+	);
+	SigurOptions(
+		const std::string &dbLog,
+		bool repeatadly
 	);
 	~SigurOptions();
 	

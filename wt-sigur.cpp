@@ -13,15 +13,25 @@
 SigurOptions::SigurOptions() :
 	connLogState(ERR_CODE_DB_NOTCONNECTED),
 	host(""), user(""), passwd(""), dbLog(DB_LOG),
-	area(0), direction(2), timeFormat("")
+	area(0), direction(2), timeFormat(""), repeatadly(false)
 {
 }
 
 SigurOptions::SigurOptions(
-	const std::string &dbLog
+	bool aRepeatadly
 ) :
 	connLogState(ERR_CODE_DB_NOTCONNECTED),
-	host(""), user(""), passwd(""), port(DB_PORT), dbLog(dbLog)
+	host(""), user(""), passwd(""), dbLog(DB_LOG),
+	area(0), direction(2), timeFormat(""), repeatadly(aRepeatadly)
+{
+}
+
+SigurOptions::SigurOptions(
+	const std::string &dbLog,
+	bool aRepeatadly
+) :
+	connLogState(ERR_CODE_DB_NOTCONNECTED),
+	host(""), user(""), passwd(""), port(DB_PORT), dbLog(dbLog), repeatadly(aRepeatadly)
 {
 	
 }
@@ -48,10 +58,8 @@ int SigurOptions::reconnect()
 
 void SigurOptions::disconnect()
 {
-	if (connLogState != ERR_CODE_DB_NOTCONNECTED) {
-		closeMysqlConn(connLog);
-		connLogState = ERR_CODE_DB_NOTCONNECTED;
-	}
+	closeMysqlConn(connLog);
+	connLogState = ERR_CODE_DB_NOTCONNECTED;
 }
 
 SigurOptions::~SigurOptions()
