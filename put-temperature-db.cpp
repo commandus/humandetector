@@ -227,9 +227,15 @@ static uint64_t putMeasure(
     6, NULL, values, lengths, binary, 0);
 
   uint64_t rr = 0;
-	if (PQresultStatus(r) == PGRES_TUPLES_OK) {
+  ExecStatusType status = PQresultStatus(r);
+	if (status == PGRES_TUPLES_OK) {
     char *v = PQgetvalue(r, 0, 0);
     rr = strtoull(v, NULL, 10);
+  } else {
+    std::cerr << "Error " 
+      << PQresStatus(status)
+			<< ": " << PQresultErrorMessage(r)
+      << std::endl;
   }
   PQclear(r);
   return rr;
@@ -325,11 +331,17 @@ int main(
   setSignalHandler();
 #endif
 
+  connectDb(options);
+  if (options.connStatus == CONNECTION_BAD) {
+    std::cerr << "Error " << ERR_CODE_DB_CONNECT << ": " << ERR_DB_CONNECT << std::endl;
+    exit(ERR_CODE_DB_CONNECT);
+  }
   if (options.repeatadly) {
     run(std::cin, std::cout, options);
   } else {
     uint64_t lastid = putMeasure(options);
     std::cout << lastid << std::endl;
   }
+  disconnectDb(options);
   return OK;
 }

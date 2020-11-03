@@ -29,7 +29,7 @@ int parseConfigDb(
 ) {
     std::stringstream ss(config);
     std::string s;
-    if (std::getline(ss, s,'\n')) {
+    if (std::getline(ss, s)) {
         conninfo = s;
     } else {
         conninfo = "";
