@@ -10,6 +10,7 @@
 #define ERR_CODE_DB_GET_RESULT			-508
 #define	ERR_CODE_DB_FETCH_RESULT		-509
 #define ERR_CODE_DB_EMPTY				-510
+#define ERR_CODE_WRONG_FILE				-511
 
 #define ERR_COMMAND_LINE        		"Wrong parameter(s)"
 #define ERR_OPEN_DEVICE         		"Error open device "
@@ -22,6 +23,7 @@
 #define ERR_DB_GET_RESULT				"Can't get the query result descriptor"
 #define ERR_DB_FETCH_RESULT				"Can't fetch result"
 #define ERR_DB_EMPTY					"Query return empty result"
+#define ERR_WRONG_FILE					"Invalid file descriptor"
 
 #define MSG_INTERRUPTED 				"Interrupted "
 #define MSG_PG_CONNECTED        		"Connected"

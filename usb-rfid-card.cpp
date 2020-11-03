@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <signal.h>
+#include <ext/stdio_filebuf.h>
 
 #include "argtable3/argtable3.h"
 
@@ -56,10 +57,11 @@ void setSignalHandler()
 class UsbKeyboardOptions {
 private:
 public:
+  int stdinFileDescriptorNumber;
   bool stopped;
   bool repeatadly;
   UsbKeyboardOptions() 
-    : stopped(false), repeatadly(false)
+    : stdinFileDescriptorNumber(0), stopped(false), repeatadly(false)
   {
 
   }
@@ -79,6 +81,7 @@ int parseCmd
 )
 {
   // sigur db connection options
+  struct arg_int *a_keyboard_fileno = arg_int1("k", "keyboard", "<fileno>", "File number e.g. 6 for bash exec 6<&0 ... exec 0<&6 6<&-");
   struct arg_lit *a_repeatadly = arg_lit0("r", "read", "read lines from stdin");
 
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
@@ -86,7 +89,7 @@ int parseCmd
 	struct arg_end *a_end = arg_end(20);
 
 	void* argtable[] = { 
-    a_repeatadly,
+    a_keyboard_fileno, a_repeatadly,
     a_verbosity, a_help, a_end 
 	};
 
@@ -102,7 +105,9 @@ int parseCmd
 	nerrors = arg_parse(argc, argv, argtable);
 
   options.repeatadly = a_repeatadly->count > 0;
-
+  if (a_keyboard_fileno->count) {
+    options.stdinFileDescriptorNumber = *a_keyboard_fileno->ival;
+  }
 	// special case: '--help' takes precedence over error reporting
 	if ((a_help->count) || nerrors) {
 		if (nerrors)
@@ -120,21 +125,22 @@ int parseCmd
 }
 
 int run (
+  std::istream &kbdin,
   std::istream &strmin,
   std::ostream &strmout,
   UsbKeyboardOptions &options
 ) {
     int cardno;
     while (!options.stopped && strmin.good()) {
-      // std::string line;
-      // std::getline(strmin, line);
+      std::string line;
+      std::getline(strmin, line);
 
-      std::cin >> cardno;
       if (strmin.eof())
         break;
+      kbdin >> cardno;
 
       time_t t = time(NULL);
-      strmout << " --card " << cardno << " --timein " << t << std::endl;
+      strmout << line << " --card " << cardno << " --timein " << t << std::endl;
       strmout.flush();
     }
 }
@@ -145,7 +151,6 @@ int main(
   int argc,
 	char* argv[]
 ) {
-  
   if (parseCmd(options, argc, argv) != 0) {
     exit(ERR_CODE_COMMAND_LINE);  
   };
@@ -155,11 +160,18 @@ int main(
   setSignalHandler();
 #endif
 
+  __gnu_cxx::stdio_filebuf<char> filebuf(options.stdinFileDescriptorNumber, std::ios::in);
+  std::istream k(&filebuf);
+
+  if (!k.good()) {
+    std::cerr << "Error " << ERR_CODE_WRONG_FILE << ": " << ERR_WRONG_FILE << std::endl;
+    exit(ERR_CODE_WRONG_FILE);  
+  }
   int c;
   if (options.repeatadly) {
-    c = run(std::cin, std::cout, options);
+    c = run(k, std::cin, std::cout, options);
   } else {
-    std::cin >> c;
+    k >> c;
     std::cout << c << std::endl;
   }
   return OK;
