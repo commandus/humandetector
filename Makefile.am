@@ -15,11 +15,12 @@ CLEANFILES = $(GEN)
 #
 # Binaries
 #
-bin_PROGRAMS = human-detector sigur-last-card usb-rfid-card
+bin_PROGRAMS = human-detector sigur-last-card usb-rfid-card \
+	put-temperature-db
 
 nobase_dist_include_HEADERS = \
-	platform.h utiltty.h utildate.h util-cmd.h \
-	strptime.h wt-sigur.h \
+	platform.h utiltty.h utildate.h util-cmd.h utilstring.h \
+	config-filename.h strptime.h wt-sigur.h \
 	third_party/argtable3/argtable3.h \
 	errlist.h daemonize.h
 
@@ -51,6 +52,15 @@ usb_rfid_card_SOURCES = \
 
 usb_rfid_card_LDADD = $(commonlibs)
 usb_rfid_card_CPPFLAGS = $(commoncppflags)
+
+put_temperature_db_SOURCES = \
+	put-temperature-db.cpp errlist.cpp \
+	config-filename.cpp daemonize.cpp \
+	util-cmd.cpp utilstring.cpp \
+	third_party/argtable3/argtable3.c
+
+put_temperature_db_LDADD = $(commonlibs) -lpq
+put_temperature_db_CPPFLAGS = $(commoncppflags)
 
 #
 # Configs, readme, CMake etc.
