@@ -13,9 +13,8 @@
 #include <iostream>
 #include <fstream>
 #include <signal.h>
-#include <ext/stdio_filebuf.h>
-#include <postgresql/libpq-fe.h>
-#include <arpa/inet.h>
+
+#include <curl/curl.h>
 
 #include "argtable3/argtable3.h"
 
@@ -24,14 +23,8 @@
 #include "util-cmd.h"
 #include "config-filename.h"
 
-/**
- * @see https://stackoverflow.com/questions/16375340/c-htonll-and-back
- */
-#define htonll(x) ((((uint64_t)htonl(x)) << 32) + htonl((x) >> 32))
-#define ntohll(x) ((((uint64_t)ntohl(x)) << 32) + ntohl((x) >> 32))
-
-const std::string progname = "put-temperature-db";
-#define DEF_CONFIG_FILE_NAME ".put-temperature-db"
+const std::string progname = "put-temperature-json";
+#define DEF_CONFIG_FILE_NAME ".put-temperature-json"
 
 static void done()
 {
@@ -74,13 +67,14 @@ void setSignalHandler()
 }
 #endif
 
-class PutDbOptions {
+class PutJsonOptions {
 private:
 public:
-  std::string conninfo;
+  std::string url;
   uint64_t gateid;
-  uint64_t userid;
   uint64_t secret;
+  uint64_t userid;
+  uint64_t id;
   time_t time;
   int t;
   int tir;
@@ -88,13 +82,14 @@ public:
   int tambient;
   bool stopped;
   bool repeatadly;
+  bool waitStdin;
+  int verbosity;
 
-  PGconn *conn;
-  ConnStatusType connStatus;
+  CURL *curl;
 
-  PutDbOptions() 
-    : gateid(0), userid(0), secret(0), time(0), t(0), tir(0), tmin(0), tambient(0),
-    conninfo(""), stopped(false), repeatadly(false), conn(NULL)
+  PutJsonOptions() 
+    : gateid(0), secret(0), userid(0), id(0), time(0), t(0), tir(0), tmin(0), tambient(0),
+    url(""), stopped(false), repeatadly(false), verbosity(0), curl(NULL)
   {
 
   }
@@ -108,18 +103,18 @@ public:
  **/
 int parseCmd
 (
-  PutDbOptions &options,
+  PutJsonOptions &options,
 	int argc,
 	char* argv[]
 )
 {
   // thermemeter measurement db connection options
-  struct arg_str *a_conninfo = arg_str0("d", "db", "<conninfo>", "e.g. host=.. dbname=.. user=.. password=..");
+  struct arg_str *a_url = arg_str0("u", "url", "<address>", "e.g. https://acme.org/");
   struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin");
 
   struct arg_int *a_gateid = arg_int0("g", "gate", "<number>", "Default 0");
+  struct arg_int *a_secret = arg_int0("s", "secret", "<number>", "Default 0");
   struct arg_int *a_userid = arg_int0("c", "card", "<number>", "Default 0");
-  // struct arg_int *a_secret = arg_int0("s", "secret", "<number>", "Not used yet");
   struct arg_int *a_time = arg_int0(NULL, "time", "<number>", "Default now");
   struct arg_int *a_t = arg_int0("t", "temperature", "<number>", "Temperature in cC (100*C). Default 0");
   struct arg_int *a_tir = arg_int0(NULL, "tir", "<number>", "Temperature IR sensor in K*100 (100*C). Default 0");
@@ -131,9 +126,8 @@ int parseCmd
 	struct arg_end *a_end = arg_end(20);
 
 	void* argtable[] = { 
-    a_conninfo, a_repeatadly,
-    a_gateid, a_userid, // a_secret, 
-    a_time, a_t, a_tir, a_tmin, a_tambient,
+    a_url, a_repeatadly,
+    a_gateid, a_secret, a_userid, a_time, a_t, a_tir, a_tmin, a_tambient,
     a_verbosity, a_help, a_end 
 	};
 
@@ -148,28 +142,29 @@ int parseCmd
 	// Parse the command line as defined by argtable[]
 	nerrors = arg_parse(argc, argv, argtable);
 
-  if (a_conninfo->count) {
-    options.conninfo = *a_conninfo->sval;
+  if (a_url->count) {
+    options.url = *a_url->sval;
   }
   options.repeatadly = a_repeatadly->count == 0;
-
+  
   if (a_gateid->count)
     options.gateid = *a_gateid->ival;
-  if (a_userid->count)
-    options.userid = *a_userid->ival;    
-    
-  /*
   if (a_secret->count)
     options.secret = *a_secret->ival;
-  */
+  if (a_userid->count)
+    options.userid = *a_userid->ival;
   if (a_time->count)
     options.time = *a_time->ival;
+  if (a_t->count)
+    options.t = *a_t->ival;
   if (a_tir->count)
     options.tir = *a_tir->ival;
   if (a_tmin->count)
     options.tmin = *a_tmin->ival;
   if (a_tambient->count)
     options.tambient = *a_tambient->ival;
+
+  options.verbosity = a_verbosity->count;
 
 	// special case: '--help' takes precedence over error reporting
 	if ((a_help->count) || nerrors) {
@@ -187,87 +182,76 @@ int parseCmd
 	return 0;
 }
 
-static void connectDb(
-  PutDbOptions &options
+static void connectJson(
+  PutJsonOptions &options
 ) {
-  options.conn = PQconnectdb(options.conninfo.c_str());
-  options.connStatus = PQstatus(options.conn);
-}
-
-static void disconnectDb(
-  PutDbOptions &options
-) {
-  if (options.conn) {
-    PQfinish(options.conn);
-    options.conn = NULL;
+  options.curl = curl_easy_init();
+  if (options.curl) {
+    curl_easy_setopt(options.curl, CURLOPT_URL, options.url.c_str());
+    // enable TCP keep-alive for this transfer
+    curl_easy_setopt(options.curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    // set keep-alive idle time to 120 seconds
+    curl_easy_setopt(options.curl, CURLOPT_TCP_KEEPIDLE, 120L);
+    // interval time between keep-alive probes: 60 seconds
+    curl_easy_setopt(options.curl, CURLOPT_TCP_KEEPINTVL, 60L);
   }
 }
 
-static void reconnectDb(
-  PutDbOptions &options
+static void disconnectJson(
+  PutJsonOptions &options
 ) {
-  disconnectDb(options);
-  connectDb(options);
+    if (options.curl) {
+      curl_easy_cleanup(options.curl);
+      options.curl = NULL;
+  }
 }
 
-static uint64_t putMeasure(
-  PutDbOptions &options
+static void reconnectJson(
+  PutJsonOptions &options
 ) {
-  uint64_t ngateid = htonll(options.gateid);
-  // uint64_t nsecret = htonll(options.secret);  // not used
-  uint64_t nuserid = htonll(options.userid);
-  uint64_t ntime = htonll(options.time);
-  int32_t nt = htonl(options.t);
-  uint32_t ntir = htonl(options.tir);
-  uint32_t ntambient = htonl(options.tambient);
-  uint32_t ntmin = htonl(options.tmin);
+}
 
-  const char *values[7] = { 
-    (const char *) &ngateid,
-    (const char *) &nuserid,
-    (const char *) &ntime,
-    (const char *) &nt,
-    (const char *) &ntir,
-    (const char *) &ntambient,
-    (const char *) &ntmin
-  };
-  int lengths[7] = { (int) sizeof(ngateid), (int) sizeof(nuserid), 
-    (int) sizeof(ntime), (int) sizeof(nt), (int) sizeof(ntir),
-    (int) sizeof(ntambient), (int) sizeof(ntmin)
-  };
-  int binary[7] = { 1, 1, 1, 1, 1, 1, 1 };
-
-  PGresult *r = PQexecParams(options.conn, "INSERT INTO measurement \
-      (gateid, userid, \"time\", t, tir, tambient, tmin) VALUES \
-      ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-    7, NULL, values, lengths, binary, 0);
-
-  uint64_t rr = 0;
-  ExecStatusType status = PQresultStatus(r);
-	if (status == PGRES_TUPLES_OK) {
-    char *v = PQgetvalue(r, 0, 0);
-    rr = strtoull(v, NULL, 10);
-  } else {
-    std::cerr << "Error " 
-      << PQresStatus(status)
-			<< ": " << PQresultErrorMessage(r)
-      << std::endl;
+static bool putMeasure(
+  PutJsonOptions &options
+) {
+  if (options.curl) {
+    std::stringstream ss;
+    ss
+      << "{\"gate\": "<< options.gateid
+      << ",\"secret\": "<< options.secret
+      << ",\"id\": "<< options.userid
+      << ",\"time\": "<< options.time
+      << ",\"t\": "<< options.t
+      << ",\"tir\": "<< options.tir
+      << ",\"tmin\": "<< options.tmin
+      << ",\"tambient\": "<< options.tambient
+      << "}";
+    std::string s = ss.str();
+    if (options.verbosity > 2) {
+      std::cerr << s << std::endl;
+    }
+    // size of the POST data
+    curl_easy_setopt(options.curl, CURLOPT_POSTFIELDSIZE, s.size());
+    // pass in a pointer to the data - libcurl will not copy
+    curl_easy_setopt(options.curl, CURLOPT_POSTFIELDS, s.c_str());
+    curl_easy_perform(options.curl);
   }
-  PQclear(r);
-  return rr;
+  return true;
 }
 
 static void parseLine
 (
-  PutDbOptions &options,
-  void** argtable,
+  PutJsonOptions &options,
+  void* argtable[],
   const std::string &line
 )
 {
   wordexp_t we;
   int argc;
+
   char ** argv = string2argv(&we, argc, line);
 	int nerrors = arg_parse(argc, argv, argtable);
+
   if (((struct arg_int *) argtable[0])->count)
     options.gateid = *((struct arg_int *) argtable[0])->ival;
   if (((struct arg_int *) argtable[1])->count)
@@ -282,13 +266,14 @@ static void parseLine
     options.tmin =  *((struct arg_int *) argtable[5])->ival;
   if (((struct arg_int *) argtable[6])->count)
     options.tambient =  *((struct arg_int *) argtable[6])->ival;
+
   argvFree(&we);
 }
 
 static void run (
   std::istream &strmin,
   std::ostream &strmout,
-  PutDbOptions &options
+  PutJsonOptions &options
 ) {
   // thermemeter measurement db connection options
   
@@ -311,15 +296,13 @@ static void run (
       break;
 
     parseLine(options, argtable, line);
-    uint64_t id = putMeasure(options);
-    if (!id) {
-      reconnectDb(options);
-      id = putMeasure(options);
+    bool sent = putMeasure(options);
+    if (sent) {
+      reconnectJson(options);
     }
-    if (!id) {
-      strmout << line << " --dberror no-connection" << std::endl;  
+    if (!sent) {
+      strmout << line << " --senterror no-connection" << std::endl;  
     } else {
-      strmout << line << " --id " << id << std::endl;
     }
     strmout.flush();
   }
@@ -327,7 +310,7 @@ static void run (
   arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 }
 
-PutDbOptions options;
+PutJsonOptions options;
 
 int main(
   int argc,
@@ -335,8 +318,8 @@ int main(
 ) {
 
   std::string config = file2string(getDefaultConfigFileName(DEF_CONFIG_FILE_NAME).c_str());
-  parseConfigDb(
-    options.conninfo,
+  parseConfigJson(
+    options.url,
     options.gateid,
     options.secret,
     config
@@ -351,9 +334,9 @@ int main(
   setSignalHandler();
 #endif
 
-  connectDb(options);
-  if (options.connStatus == CONNECTION_BAD) {
-    std::cerr << "Error " << ERR_CODE_DB_CONNECT << ": " << ERR_DB_CONNECT << std::endl;
+  connectJson(options);
+  if (!options.curl) {
+    std::cerr << "Error " << ERR_CODE_JSON_CONNECT << ": " << ERR_DB_CONNECT << std::endl;
     exit(ERR_CODE_DB_CONNECT);
   }
   if (options.repeatadly) {
@@ -362,6 +345,6 @@ int main(
     uint64_t lastid = putMeasure(options);
     std::cout << lastid << std::endl;
   }
-  disconnectDb(options);
+  disconnectJson(options);
   return OK;
 }

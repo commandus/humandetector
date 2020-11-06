@@ -16,7 +16,7 @@ CLEANFILES = $(GEN)
 # Binaries
 #
 bin_PROGRAMS = human-detector sigur-last-card usb-rfid-card \
-	put-temperature-db
+	put-temperature-db put-temperature-json
 
 nobase_dist_include_HEADERS = \
 	platform.h utiltty.h utildate.h util-cmd.h utilstring.h \
@@ -61,6 +61,15 @@ put_temperature_db_SOURCES = \
 
 put_temperature_db_LDADD = $(commonlibs) -lpq
 put_temperature_db_CPPFLAGS = $(commoncppflags)
+
+put_temperature_json_SOURCES = \
+	put-temperature-json.cpp errlist.cpp \
+	config-filename.cpp daemonize.cpp \
+	util-cmd.cpp utilstring.cpp \
+	third_party/argtable3/argtable3.c
+
+put_temperature_json_LDADD = $(commonlibs) -lcurl
+put_temperature_json_CPPFLAGS = $(commoncppflags)
 
 #
 # Configs, readme, CMake etc.

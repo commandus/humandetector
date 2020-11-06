@@ -82,7 +82,7 @@ int parseCmd
 {
   // sigur db connection options
   struct arg_int *a_keyboard_fileno = arg_int1("k", "keyboard", "<fileno>", "File number e.g. 6 for bash exec 6<&0 ... exec 0<&6 6<&-");
-  struct arg_lit *a_repeatadly = arg_lit0("r", "read", "read lines from stdin");
+  struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin");
 
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
 	struct arg_lit *a_help = arg_lit0("?", "help", "Show this help");
@@ -104,7 +104,7 @@ int parseCmd
 	// Parse the command line as defined by argtable[]
 	nerrors = arg_parse(argc, argv, argtable);
 
-  options.repeatadly = a_repeatadly->count > 0;
+  options.repeatadly = a_repeatadly->count == 0;
   if (a_keyboard_fileno->count) {
     options.stdinFileDescriptorNumber = *a_keyboard_fileno->ival;
   }

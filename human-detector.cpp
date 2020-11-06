@@ -49,6 +49,7 @@ class DetectorOptions {
     int fd;
     bool stopped;
     std::string path;
+    int timeout;
     int temperature0;
     int temperature1;
     int dt;
@@ -67,12 +68,15 @@ class DetectorOptions {
     int maxT;
     int minT;
     double emissivityK;
+    bool repeatadly;
+    bool waitStdin;
+
     DetectorOptions() :
-      fd(0), stopped(false), path(""), temperature0(DEF_TEMPERATURE_THRESHOLD_C_MIN), temperature1(DEF_TEMPERATURE_THRESHOLD_C_MAX), dt(1),
+      fd(0), stopped(false), path(""), timeout(1), temperature0(DEF_TEMPERATURE_THRESHOLD_C_MIN), temperature1(DEF_TEMPERATURE_THRESHOLD_C_MAX), dt(1),
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
       printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
-      maxT(0), minT(0), emissivityK(0.92)
+      maxT(0), minT(0), emissivityK(0.92), repeatadly(false), waitStdin(false)
     {
     }
 };
@@ -143,6 +147,10 @@ int parseCmd
 {
   // device path
   struct arg_str *a_path = arg_str0(NULL, NULL, "COM port path", "Default " DEF_DEVICE_PATH);
+  struct arg_int *a_timeout = arg_int0(NULL, "timeout", "<seconds>", "Serial port read time-out, s");
+  struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin");
+  struct arg_lit *a_wait_stdin = arg_lit0("w", "wait", "wait input line from stdin");
+
   // temperature
   struct arg_int *a_t0 = arg_int0("l", "t0", "<number>", "lo temperature threshold, C. Default 32");
   struct arg_int *a_t1 = arg_int0("h", "t1", "<number>", "hi temperature threshold, C. Default 42");
@@ -162,7 +170,8 @@ int parseCmd
 	struct arg_end *a_end = arg_end(20);
 
 	void* argtable[] = { 
-		a_path, a_t0, a_t1, a_window,
+		a_path, a_timeout, a_repeatadly, a_wait_stdin,
+    a_t0, a_t1, a_window,
     a_degrees, a_mode, a_printMaxOnly, a_reconnect, a_timeFormat,
     a_delay, a_verbosity, a_help, a_end 
 	};
@@ -182,8 +191,15 @@ int parseCmd
      detectorOptions.path = *a_path->sval;
   }
 
+  options.repeatadly = a_repeatadly->count == 0;
+  options.waitStdin = a_wait_stdin->count > 0;
+
   if (detectorOptions.path.empty()) {
     detectorOptions.path = DEF_DEVICE_PATH;
+  }
+
+  if (a_timeout->count) {
+    detectorOptions.timeout = *a_timeout->ival;
   }
 
   if (a_degrees->count) {
@@ -318,7 +334,11 @@ static size_t sendRequestObjectTemperature(
     c = '0';
     break;
   }
-  return write(options.fd, &c, 1);
+  size_t sz = write(options.fd, &c, 1);
+  if (options.verbosity > 2) {
+    std::cerr << "Write " << sz << " byte(s) to " << options.path << ": " << c << std::endl;
+  }
+  return sz;
 }
 
 
@@ -372,8 +392,8 @@ static std::string getStartTimeStamp(
 ) {
   if (options.timeFormat.empty()) {
     std::stringstream ss;
-    ss << std::dec << options.startTime 
-    << "." << options.startTimeMs;
+    ss << std::dec << options.startTime // << "." 
+      << std::setw(3) << std::setfill('0') << options.startTimeMs;
     return ss.str();
   }
 
@@ -405,25 +425,43 @@ static void putTemperature(
   int temperatureK100,
   int temperatureMinK100
 ) {
-  double k = (calcT(temperatureK100, temperatureMinK100, options.emissivityK) - 27315) / 100.0;
+  int t = (calcT(temperatureK100, temperatureMinK100, options.emissivityK) - 27315);
+  int tir;
+  int tmin;
   switch (options.degrees) {
-    case DEG_C:
-        std::cout 
-          << getStartTimeStamp(options) << "\t" 
-          << std::fixed << std::setprecision(2)
-          << k << "\t" 
-          << (temperatureK100 - 27315) / 100.0 << "\t"
-          << (temperatureMinK100 - 27315) / 100.0  
-          << std::endl;
-      break;
-    default:
-        std::cout 
-          << getStartTimeStamp(options) << "\t" 
-          << std::fixed << std::setprecision(2)
-          << k << "\t"
-          << temperatureK100 / 100.0 << "\t" 
-          << temperatureMinK100 / 100.0  
-          << std::endl;
+  case DEG_C:
+    tir = (temperatureK100 - 27315);
+    tmin = (temperatureMinK100 - 27315);
+    break;
+  default:
+    tir = temperatureK100;
+    tmin = temperatureMinK100;
+  }
+
+  if (options.repeatadly) {
+    std::string line;
+    if (options.waitStdin) {
+      std::getline(std::cin, line);
+      if (std::cin.eof())
+        return;
+    }
+    std::cout << line
+      << "--time " << getStartTimeStamp(options)
+      << " -t " << t
+      << " --tir " << tir
+      << " --tmin " << tmin
+      << std::endl;
+
+  } else {
+    std::cout 
+      << getStartTimeStamp(options) << "\t" 
+      << t << "\t" 
+      << tir << "\t"
+      << tmin  
+      << std::endl;
+  }
+  if (!options.repeatadly) {
+    options.stopped = true;
   }
 }
 
@@ -523,7 +561,21 @@ static void readDevice(
   options.minT = options.temperature1;
   sendRequestObjectTemperature(options);
 	while (!options.stopped) {
-		int r = read(options.fd, &c, 1);
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(options.fd, &fds);
+    timeval w;
+    w.tv_sec = options.timeout;
+    w.tv_usec = 0;
+    int r;
+    if (select(options.fd + 1, &fds, NULL, 0, &w) == 1) {
+      r = read(options.fd, &c, 1);
+    } else {
+      sendRequestObjectTemperature(options);
+      continue;
+    }
+
+		
     switch (r)
     {
     case -1:  // error
@@ -535,7 +587,7 @@ static void readDevice(
         if (options.fd) {
           closeDevice(options.fd);
         }
-        options.fd = openDevice(options.path);
+        options.fd = openDevice(options.path, options.timeout);
         continue;
       } else {
         // exit gracefully
@@ -577,7 +629,7 @@ int main(
   if (options.verbosity > 1)
     std::cerr << "Device " << options.path << std::endl;
 
-  options.fd = openDevice(options.path);
+  options.fd = openDevice(options.path, options.timeout);
   if (options.fd < 0) {
     std::cerr << "Error " << ERR_CODE_OPEN_DEVICE << ": " << strerror_humandetector(ERR_CODE_OPEN_DEVICE) << std::endl;
     exit(ERR_CODE_OPEN_DEVICE);

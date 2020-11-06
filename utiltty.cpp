@@ -9,12 +9,12 @@
 
 int openDevice
 (
-	const std::string &deviceName
+	const std::string &deviceName,
+	int timeout
 )
 {
 	int flags = O_RDWR;
 	int paritycheck = 0;
-	int timeout = 0;
 	int flagspeed = B115200;
 
 	// Open serial port and set default options

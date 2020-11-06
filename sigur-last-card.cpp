@@ -92,7 +92,7 @@ int parseCmd
   struct arg_int *a_area = arg_int0("a", "area", "<number>", "-1: any. Default 0");
   struct arg_int *a_direction = arg_int0("d", "direction", "<number>", "1- out, 2- in, 0- any. Default 2(in)");
 
-  struct arg_lit *a_repeat = arg_lit0("r", "read", "read lines from stdin");
+  struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin");
   struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
 
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
@@ -101,7 +101,7 @@ int parseCmd
 
 	void* argtable[] = { 
 		a_dbhost, a_dbuser, a_dbpasswd, a_dbport,
-    a_area, a_direction, a_repeat, a_timeFormat,
+    a_area, a_direction, a_repeatadly, a_timeFormat,
     a_verbosity, a_help, a_end 
 	};
 
@@ -149,7 +149,7 @@ int parseCmd
     options.direction = DEF_DIRECTION;
   }
 
-  options.repeatadly = a_repeat->count > 0;
+  options.repeatadly = a_repeatadly->count == 0;
 
   if (a_timeFormat->count) {
      options.timeFormat = *a_timeFormat->sval;

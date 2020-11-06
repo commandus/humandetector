@@ -6,11 +6,12 @@
 #define ERR_CODE_DB_NOTCONNECTED        -504
 #define ERR_CODE_DB_CREATE_DESCRIPTOR	-505
 #define ERR_CODE_DB_CONNECT				-506
-#define ERR_CODE_DB_EXEC_QUERY			-507
-#define ERR_CODE_DB_GET_RESULT			-508
-#define	ERR_CODE_DB_FETCH_RESULT		-509
-#define ERR_CODE_DB_EMPTY				-510
-#define ERR_CODE_WRONG_FILE				-511
+#define ERR_CODE_JSON_CONNECT			-507
+#define ERR_CODE_DB_EXEC_QUERY			-508
+#define ERR_CODE_DB_GET_RESULT			-509
+#define	ERR_CODE_DB_FETCH_RESULT		-510
+#define ERR_CODE_DB_EMPTY				-511
+#define ERR_CODE_WRONG_FILE				-512
 
 #define ERR_COMMAND_LINE        		"Wrong parameter(s)"
 #define ERR_OPEN_DEVICE         		"Error open device "
@@ -19,6 +20,7 @@
 #define ERR_DB_NOTCONNECTED     		"Database not connected"
 #define ERR_DB_CREATE_DESCRIPTOR 		"Can't create MySQL descriptor"
 #define ERR_DB_CONNECT					"Can't connect to MySQL server"
+#define ERR_JSON_CONNECT				"Can't connect to the web service"
 #define ERR_DB_EXEC_QUERY				"Can't execute SQL query"
 #define ERR_DB_GET_RESULT				"Can't get the query result descriptor"
 #define ERR_DB_FETCH_RESULT				"Can't fetch result"

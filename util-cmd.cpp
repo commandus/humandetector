@@ -7,15 +7,17 @@
  */
 
 char **string2argv(
-	wordexp_t **we,
+	wordexp_t *we,
 	int &argc,
 	const std::string &cmdline
 )
 {
-	if (wordexp(cmdline.c_str(), *we, 0))
+	std::string cmdline2 = "0 " + cmdline;
+
+	if (wordexp(cmdline2.c_str(), we, 0))
 		return NULL;
-	argc = (*we)->we_wordc;
-	return (*we)->we_wordv;
+	argc = we->we_wordc;
+	return we->we_wordv;
 }
 
 void argvFree(
