@@ -12,9 +12,18 @@
 
 #include <string>
 
+/**
+ * 
+ * Open Vega device serial port
+ * 
+ * @param deviceName e.g. "/dev/ttyACM0"
+ * @param timeout seconds
+ * 
+ */ 
 int openDevice
 (
-	const std::string &deviceName
+	const std::string &deviceName,
+	int timeout
 );
 
 void closeDevice(

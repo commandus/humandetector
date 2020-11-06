@@ -6,7 +6,7 @@
 #include <wordexp.h>
 
 char **string2argv(
-	wordexp_t **we,
+	wordexp_t *we,
 	int &argc,
 	const std::string &cmdline
 );
