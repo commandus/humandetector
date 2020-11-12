@@ -32,5 +32,6 @@
 #define MSG_PG_CONNECTING       		"Connecting..."
 #define MSG_DAEMON_STARTED      		"Start daemon "
 #define MSG_DAEMON_STARTED_1    		". Check syslog."
+#define MSG_WS_TIMEOUT					"Web service time out"
 
 const char *strerror_humandetector(int errcode);
