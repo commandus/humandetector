@@ -12,6 +12,8 @@
 #define	ERR_CODE_DB_FETCH_RESULT		-510
 #define ERR_CODE_DB_EMPTY				-511
 #define ERR_CODE_WRONG_FILE				-512
+#define ERR_CODE_INVALID_PAR_DELAY		-513
+#define ERR_CODE_INVALID_PAR_LOG_FILE	-514
 
 #define ERR_COMMAND_LINE        		"Wrong parameter(s)"
 #define ERR_OPEN_DEVICE         		"Error open device "
@@ -26,6 +28,8 @@
 #define ERR_DB_FETCH_RESULT				"Can't fetch result"
 #define ERR_DB_EMPTY					"Query return empty result"
 #define ERR_WRONG_FILE					"Invalid file descriptor"
+#define ERR_INVALID_PAR_DELAY			"Delay must be great or equil 0."
+#define ERR_INVALID_PAR_LOG_FILE		"Can't open log file "
 
 #define MSG_INTERRUPTED 				"Interrupted "
 #define MSG_PG_CONNECTED        		"Connected"
