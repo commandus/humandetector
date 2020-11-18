@@ -70,15 +70,26 @@ class DetectorOptions {
     double emissivityK;
     bool repeatadly;
     bool waitStdin;
+    std::string logfilename;
+    std::ostream *logstream;
 
     DetectorOptions() :
       fd(0), stopped(false), path(""), timeout(1), temperature0(DEF_TEMPERATURE_THRESHOLD_C_MIN), temperature1(DEF_TEMPERATURE_THRESHOLD_C_MAX), dt(1),
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
       printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
-      maxT(0), minT(0), emissivityK(0.92), repeatadly(false), waitStdin(false)
+      maxT(0), minT(0), emissivityK(0.92), repeatadly(false), waitStdin(false),
+      logfilename(""), logstream(NULL)
     {
     }
+
+    ~DetectorOptions() {
+      if (logstream) {
+        delete logstream;
+        logstream = NULL;
+      }
+    }
+    
 };
 
 static DetectorOptions options;
@@ -165,6 +176,8 @@ int parseCmd
   struct arg_lit *a_reconnect = arg_lit0("r", "reconnect", "re-open COM port on error");
   struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "Output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
 
+  struct arg_str *a_logfilename = arg_str0(NULL, "logfile", "<file>", "time and temperature log file");
+
   struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
 	struct arg_lit *a_help = arg_lit0("?", "help", "Show this help");
 	struct arg_end *a_end = arg_end(20);
@@ -173,7 +186,7 @@ int parseCmd
 		a_path, a_timeout, a_repeatadly, a_wait_stdin,
     a_t0, a_t1, a_window,
     a_degrees, a_mode, a_printMaxOnly, a_reconnect, a_timeFormat,
-    a_delay, a_verbosity, a_help, a_end 
+    a_delay, a_logfilename, a_verbosity, a_help, a_end 
 	};
 
 	int nerrors;
@@ -287,8 +300,24 @@ int parseCmd
       detectorOptions.delay = *a_delay->ival;
   }
 
+  
+  if (a_logfilename->count) {
+      detectorOptions.logfilename = *a_logfilename->sval;
+      detectorOptions.logstream = new std::fstream(*a_logfilename->sval, std::ostream::out);
+      if (!detectorOptions.logstream || detectorOptions.logstream->bad()) {
+        std::cerr << ERR_INVALID_PAR_LOG_FILE  << std::endl;
+        nerrors++;
+        if (detectorOptions.logstream) {
+          delete detectorOptions.logstream;
+          detectorOptions.logstream = NULL;
+        }
+      }
+  } else {
+    detectorOptions.logfilename = "";
+  }
+
   if (detectorOptions.delay < 0) {
-    std::cerr << "Delay must be great or equil 0." << std::endl;
+    std::cerr << ERR_INVALID_PAR_DELAY  << std::endl;
     nerrors++;
   }
 
@@ -612,6 +641,19 @@ static void readDevice(
       buf.str(remains);
 
       options.currentTime = time_ms(options.startTimeMs);
+      if (options.logstream) {
+          float t1;
+          switch (options.degrees) {
+          case DEG_C:
+            t1 = (t - 27315) / 100.;
+            break;
+          default:
+            t1 = t / 100.;
+          }
+
+        *options.logstream << getStartTimeStamp(options) << "\t"
+          << std::fixed << std::setprecision(1) << t1 << std::endl;
+      }
       processWindow(options, t);
       sendRequestObjectTemperature(options);
     }
