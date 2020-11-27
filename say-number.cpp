@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <assert.h>
+#include <iostream>
+#include <sstream>
 #include <pulse/pulseaudio.h>
 
 #include "wavemap.h"
+#include "number2words.h"
 
 #define FORMAT PA_SAMPLE_U8
 #define RATE 44100
@@ -12,7 +15,9 @@ void stream_state_cb(pa_stream *s, void *mainloop);
 void stream_success_cb(pa_stream *stream, int success, void *userdata);
 void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata);
 
-int play() {
+WaveMap wavemap;
+
+int startPlay() {
     pa_threaded_mainloop *mainloop;
     pa_mainloop_api *mainloop_api;
     pa_context *context;
@@ -83,9 +88,6 @@ int play() {
 
     // Uncork the stream so it will start playing
     pa_stream_cork(stream, 0, stream_success_cb, mainloop);
-
-    // Play until we get a character
-    getc(stdin);
 }
 
 void context_state_cb(pa_context* context, void* mainloop) {
@@ -112,11 +114,7 @@ void stream_write_cb(
 
         pa_stream_begin_write(stream, (void**) &buffer, &bytes_to_fill);
 
-        for (i = 0; i < bytes_to_fill; i += 2) {
-            buffer[i] = (i%100) * 40 / 100 + 44;
-            buffer[i+1] = (i%100) * 40 / 100 + 44;
-        }
-
+        wavemap.next(buffer, bytes_to_fill);
         pa_stream_write(stream, buffer, bytes_to_fill, NULL, 0LL, PA_SEEK_RELATIVE);
         bytes_remaining -= bytes_to_fill;
     }
@@ -126,9 +124,39 @@ void stream_success_cb(pa_stream *stream, int success, void *userdata) {
     return;
 }
 
-WaveMap wavemap;
-
 int main(int argc, char *argv[]) {
-	wavemap.put(0, "wav/0.wav");
-	play();
+    WaveHeader hdr;
+    wavemap.loadFiles("wav/", ".wav");
+    std::cerr << wavemap.toString();
+	
+    // startPlay();
+    
+    // Play until we get a character
+    // getc(stdin);
+
+    for (float f = 31.0; f <= 38.0; f += 0.1) {
+        wavemap.say(f, 1);
+    }
+
+    char buffer[1024];
+    size_t ofs = 0;
+    for (int i = 0; i <= 100000; i++) {
+        bool eof;
+        wavemap.get(eof, &buffer, ofs, sizeof(buffer));
+    }
+    /*
+    std::vector<int> keys;
+    uint64_t numbers[] = { 18446744073709551615U };
+    for (int i = 0; i < sizeof(numbers) / sizeof(uint64_t); i++) {
+        keys.clear();
+        std::cerr << numbers[i] << ":\t" << number2stringRU(numbers[i]) << std::endl;
+
+        std::vector<int32_t> codes;
+        number2codeRU(codes, numbers[i]);
+        for (std::vector<int32_t>::const_iterator it(codes.begin()); it < codes.end(); ++it) {
+            std::cerr << *it << std::endl;
+        }
+        std::cerr << std::endl;
+    }
+    */
 }

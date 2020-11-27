@@ -22,7 +22,7 @@ nobase_dist_include_HEADERS = \
 	platform.h utiltty.h utildate.h util-cmd.h utilstring.h \
 	config-filename.h strptime.h wt-sigur.h \
 	third_party/argtable3/argtable3.h \
-	errlist.h daemonize.h wavemap.h
+	errlist.h daemonize.h wavemap.h number2words.h
 
 commonlibs = -L/usr/local/lib 
 
@@ -74,7 +74,8 @@ say_number_SOURCES = \
 	say-number.cpp wavemap.cpp errlist.cpp \
 	config-filename.cpp daemonize.cpp \
 	util-cmd.cpp utilstring.cpp \
-	third_party/argtable3/argtable3.c
+	third_party/argtable3/argtable3.c \
+	number2words.cpp 
 say_number_LDADD = $(commonlibs) -lpulse
 say_number_CPPFLAGS = $(commoncppflags) -D_REENTRANT
 
