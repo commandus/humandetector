@@ -1,8 +1,12 @@
 #include <cstring>
 #include <sstream>
+#include <iostream>
+#include <iomanip>
 #include "wavemap.h"
 #include "utilstring.h"
 #include "number2words.h"
+
+#define DEBUG 1
 
 WaveMap::WaveMap()
 	: hasSentence(false), sentenceofs(0)
@@ -51,7 +55,7 @@ bool WaveMap::put(
 	return put(key, ss.str(), header);
 }
 
-bool WaveMap::rm(
+void WaveMap::rm(
 	int32_t key
 ) {
 	mMap.erase(key);
@@ -59,84 +63,151 @@ bool WaveMap::rm(
 
 size_t WaveMap::copyKey(
 	int32_t key,
-	size_t ofs,
-	void *buffer,
-	size_t size
-) {
-	size_t r;
-	size_t sz = mMap[key].size();
-	if (sz > ofs) {
-		r = sz - ofs;
-	} else {
-		r = 0;
-	}
-	if (r > size) {
-		r = size;
-	}
-	if (r) {
-		memmove(buffer, mMap[key].c_str() + ofs, r);
-	}
-	return r;
-}
-
-size_t WaveMap::copyNoise(
-	void *buffer,
-	size_t size
-) {
-	memset(buffer, 0, size);	///< TODO add comfort noise
-}
-
-size_t WaveMap::getKey(
-	int32_t key,
+	size_t keyofs,
 	void *buffer,
 	size_t ofs,
-	size_t size
-) {
-	return copyKey(key, ofs, buffer, size);
-}
-
-size_t WaveMap::get(
-	bool &eof,
-	const SENTENCE &keys,
-	void *buffer,
-	size_t &ofs,
 	size_t size
 ) {
 	size_t r = 0;
-	size_t sz = 0;
-	size_t o = ofs;
-	for (std::vector<int32_t>::const_iterator it(keys.begin()); it != keys.end(); ++it) {
-		sz += mMap[*it].size();
-		if (o < sz) {
-			r += copyKey(*it, sz - o, buffer, size);
-			o = ofs + r;
-			break;
-		}
-		if (sz >= size) {
-			eof = true;
-			ofs = 0;
-			break;
+	int sz = mMap[key].size() - keyofs;
+	if (sz <= 0)
+		return r;
+
+	size_t endpos = ofs + sz;
+	if (endpos <= size) {
+		r = sz;
+	} else {
+		if (ofs < size) {
+			r = size - ofs;
 		}
 	}
-	eof = false;
+	if (r + ofs > size) {
+		r = size;
+	}
+
+#ifdef DEBUG
+	std::cerr << "    copy key: " << key << ", keyofs: " << keyofs << ", ofs: " << ofs << ", r: " << r << ", bytes: " << r + ofs << std::endl;
+#endif
+	if (r) {
+		memmove(((char *) buffer) + ofs, mMap[key].c_str() + keyofs, r);
+		// keyofs += r;
+	}
 	return r;
 }
 
-size_t WaveMap::get(
-	bool &eof,
+void WaveMap::copyNoise(
+	void *buffer,
+	size_t ofs,
+	size_t size
+) {
+	if (ofs < size)
+		memset(((char *) buffer) + ofs, 0, size - ofs);	///< TODO add comfort noise
+}
+
+bool WaveMap::isLast(
+	const SENTENCE &keys,
+	size_t &keysofs,
 	void *buffer,
 	size_t &ofs,
 	size_t size
 ) {
-	if (!hasSentence) {
-		if (!nextSentence()) {
-			copyNoise(buffer, size);	
-			ofs = 0;
-			eof = true;
-			return 0;
+
+}
+
+size_t WaveMap::get(
+	const SENTENCE &keys,
+	size_t &keysofs,
+	void *buffer,
+	size_t &ofs,
+	size_t size
+) {
+#ifdef DEBUG
+	std::cerr << "  get" << std::endl << ", size: " << keys.size;
+	for (std::vector<int32_t>::const_iterator it(keys.data.begin()); it != keys.data.end(); ++it)
+		std::cerr << *it << " ";
+	std::cerr << std::endl;
+#endif
+
+	size_t keyssz = 0;
+	size_t sizeCopiedAll = 0;
+	for (std::vector<int32_t>::const_iterator it(keys.data.begin()); it != keys.data.end(); ++it) {
+		if (ofs >= size) {
+#ifdef DEBUG
+	std::cerr << "  break: ofs >= size " <<  ofs << ", " << size << std::endl;
+#endif
+			break;
 		}
+		size_t ksz = mMap[*it].size();
+		int keyofs = keysofs - keyssz;
+		if (keyofs < 0)
+			continue;
+#ifdef DEBUG
+	std::cerr << "  sizeCopiedAll " <<  sizeCopiedAll  << std::endl;
+#endif
+		if (sizeCopiedAll >= size) {
+#ifdef DEBUG
+	std::cerr << "  break: sizeCopiedAll >= size " <<  sizeCopiedAll  << ", " << size << std::endl;
+#endif
+			break;
+		}			
+		// if (keysofs >= keyssz)continue;
+#ifdef DEBUG
+	std::cerr << "  key size: " << mMap[*it].size() << ", ofs: " << ofs << ", keysofs: " << keysofs<< ", keyofs: " << keyofs<< ", keyssz: " << keyssz << std::endl;
+#endif
+		size_t sizeCopied = copyKey(*it, keyofs, buffer, ofs, size);
+		ofs += sizeCopied; 
+		sizeCopiedAll += sizeCopied;
+		keyssz += ksz;
 	}
-	return get(eof, sentence, buffer, ofs, size);
+#ifdef DEBUG
+	std::cerr << "  sizeCopiedAll " <<  sizeCopiedAll << std::endl;
+#endif
+
+	if (keysofs + sizeCopiedAll < keys.size) {
+		hasSentence = true;
+		keysofs += sizeCopiedAll;
+	} else {
+#ifdef DEBUG
+	std::cerr << "  keysofs + sizeCopiedAll >= keys.size " 
+		<< " keysofs: " << keysofs
+		<< " sizeCopiedAll: " << sizeCopiedAll
+		<< " keys.size: " << keys.size
+		<< std::endl;
+#endif
+		hasSentence = false;
+		keysofs = 0;
+	}
+	return sizeCopiedAll;
+}
+
+size_t WaveMap::get(
+	size_t &keysofs,
+	void *buffer,
+	size_t size
+) {
+	size_t ofs = 0;
+	while (true) {
+		if (!hasSentence) {
+#ifdef DEBUG
+			std::cerr << "no sentence, sentences count: " << sentences.size() << ", trying get next sentence" << std::endl;
+#endif
+			if (!nextSentence()) {
+#ifdef DEBUG
+				std::cerr << "no sentence, sentences count: " << sentences.size() << ", noise" << std::endl;
+#endif
+				copyNoise(buffer, ofs, size);	
+				keysofs = 0;
+				return size;
+			}
+		}
+#ifdef DEBUG
+		std::cerr << "has sentence, sentences count: " << sentences.size() << ", size: " << size << ", keysofs: " << keysofs << std::endl;
+#endif
+		size_t sz = get(sentence, keysofs, buffer, ofs, size);
+		if ((sz == 0) || (ofs >= size))
+			break;
+	}
+	return ofs;
 }
 
 std::string WaveMap::toString() {
@@ -152,26 +223,25 @@ void WaveMap::loadFiles(
 	const std::string &prefix,
 	const std::string &suffix
 ) {
-	WaveHeader hdr;
-	put(0, prefix, suffix, &hdr);
-	put(-1, prefix, suffix, "minus", &hdr);
-	put(-2, prefix, suffix, "dot", &hdr);
-	put(-3, prefix, suffix, "silence", &hdr);
+	put(0, prefix, suffix, &header);
+	put(-1, prefix, suffix, "minus", &header);
+	put(-2, prefix, suffix, "dot", &header);
+	put(-3, prefix, suffix, "silence", &header);
 	// powers
 	for (int i = 1000; i <= 1000000000; i *= 10) {
-		put(i, prefix, suffix, &hdr);
-		put(i + 1, prefix, suffix, &hdr);	// -a
-		put(i + 2, prefix, suffix, &hdr);	// -ov
+		put(i, prefix, suffix, &header);
+		put(i + 1, prefix, suffix, &header);	// -a
+		put(i + 2, prefix, suffix, &header);	// -ov
 	}
 	// digits
     for (int i = 1; i < 10; i++) {
-		put(i, prefix, suffix, &hdr);				// m
-		put(i * 10, prefix, suffix, &hdr);
-		put(i * 100, prefix, suffix, &hdr);
+		put(i, prefix, suffix, &header);				// m
+		put(i * 10, prefix, suffix, &header);
+		put(i * 100, prefix, suffix, &header);
     }
 	// digits female
     for (int i = 1; i <= 2; i++) {
-		put((i * 100) + 88, prefix, suffix, &hdr);	// f
+		put((i * 100) + 88, prefix, suffix, &header);	// f
     }
 }
 
@@ -182,7 +252,7 @@ void WaveMap::next(
 	uint8_t *b = (uint8_t *) buffer;
 	if (!hasSentence) {
 		if (!nextSentence()) {
-			copyNoise(buffer, size);
+			copyNoise(buffer, 0, size);
 			return;
 		}
 	}
@@ -193,10 +263,10 @@ void WaveMap::say(
 ) {
 	SENTENCE codes;
 	if (value < 0) {
-		codes.push_back(-1);
+		codes.data.push_back(-1);
 		value = -value;
 	}
-	number2codeRU(codes, value);
+	number2codeRU(codes.data, value);
 	addSentence(codes);
 }
 
@@ -210,24 +280,25 @@ static int pow10(int n)
 }
 
 void WaveMap::say(
-	float value,
+	double value,
 	int precision
 ) {
 	SENTENCE codes;
 	if (value < 0) {
-		codes.push_back(-1);
+		codes.data.push_back(-1);
 		value = -value;
 	}
-	number2codeRU(codes, (int32_t) value);
+	number2codeRU(codes.data, (int32_t) value);
+	if (codes.data.size())
+		codes.data.pop_back();	// remove last delimiter
 	if (precision > 0) {
 		int v = (value - (int64_t) value) * pow10(precision);
 		if (v > 0) {
-			codes.push_back(-2);	// dot
-			number2codeRU(codes, v);
+			codes.data.push_back(-2);	// dot
+			number2codeRU(codes.data, v);
 		}
 	}
 	addSentence(codes);
-
 }
 
 /**
@@ -246,12 +317,34 @@ bool WaveMap::nextSentence()
 	if (hasSentence) {
 		sentenceofs = 0;
 	}
-	return true;
+	return hasSentence;
 }
 
-void WaveMap::addSentence(const SENTENCE &value)
+void WaveMap::calcSizes(SENTENCE &value)
+{
+	size_t sz = 0;
+	for (std::vector<int32_t>::const_iterator it(value.data.begin()); it != value.data.end(); ++it) {
+		sz += mMap[*it].size();
+	}
+	value.size = sz;
+}
+
+void WaveMap::addSentence(SENTENCE &value)
 {
 	mutexsentences.lock();
+	calcSizes(value);
 	sentences.push_back(value);
 	mutexsentences.unlock();
+}
+
+const SENTENCE* WaveMap::getSentence() const {
+	return &sentence;
+}
+
+const SENTENCES* WaveMap::getSentences() const {
+	return &sentences;
+}
+
+bool WaveMap::hasQueuedSentence() const {
+	return hasSentence;
 }

@@ -29,7 +29,13 @@ typedef struct WaveHeader {
     // uint8_t bytes[]; 	// Remainder of wave file is bytes
 } WaveHeader;
 
-typedef std::vector<int32_t> SENTENCE;
+
+class SENTENCE {
+	public:
+		std::vector<int32_t> data;
+		size_t size;
+};
+
 typedef std::deque<SENTENCE> SENTENCES;
 
 void number2keys(
@@ -46,26 +52,37 @@ private:
 	bool hasSentence;
 	SENTENCE sentence;	// sentence to play
 	size_t sentenceofs;
+
 	size_t copyKey(
 		int32_t key,
-		size_t ofs,
-		void *buffer,
-		size_t size
-	);
-	size_t copyNoise(
-		void *buffer,
-		size_t size
-	);
-	size_t getKey(
-		int32_t key,
+		size_t keyofs,
 		void *buffer,
 		size_t ofs,
 		size_t size
+	);
+	void copyNoise(
+		void *buffer,
+		size_t ofs,
+		size_t size
+	);
+
+	bool isLast(
+		const SENTENCE &keys,
+		size_t &keysofs,
+		void *buffer,
+		size_t &ofs,
+		size_t size
+	);
+	void calcSizes(
+		SENTENCE &value
 	);
 protected:
 	bool nextSentence();
-	void addSentence(const SENTENCE &value);
+	void addSentence(
+		SENTENCE &value
+	);
 public:
+	WaveHeader header;
 	WaveMap();
 	bool put(
 		int32_t key,
@@ -85,20 +102,19 @@ public:
 		const std::string &suffix,
 		WaveHeader *header
 	);
-	bool rm(
+	void rm(
 		int32_t key
 	);
 	size_t get(
-		bool &eof,
 		const SENTENCE &keys,
+		size_t &keysofs,
 		void *buffer,
 		size_t &ofs,
 		size_t size
 	);
 	size_t get(
-		bool &eof,
+		size_t &keysofs,
 		void *buffer,
-		size_t &ofs,
 		size_t size
 	);
 	std::string toString();
@@ -116,7 +132,12 @@ public:
 	);
 
 	void say(
-		float value,
+		double value,
 		int precision
 	);
+
+	// debug
+	const SENTENCE* getSentence() const;
+	const SENTENCES* getSentences() const;
+	bool hasQueuedSentence() const;
 };

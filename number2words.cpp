@@ -143,20 +143,13 @@ void number2codeRU (
 	std::vector<int32_t> &retval,
 	uint64_t value
 ) {
-	int i;
-	uint64_t mny;
-	uint64_t divisor;
-
 	if (!value) {
 		retval.push_back(0);
 		return;
 	}
-
-	for (i = 0, divisor = 1; i < DG_POWER - 1; i++) {
-		divisor *= 1000U;
-	}
-	for (i = DG_POWER - 1; i >= 0; i--) {
-		mny = value / divisor;
+	uint64_t divisor = 1000000000000000000U;	// 10^7
+	for (int i = DG_POWER - 1; i >= 0; i--) {
+		uint64_t mny = value / divisor;
 		value %= divisor;
 		if (mny == 0) {
 			if (i > 0) {

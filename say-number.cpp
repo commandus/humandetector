@@ -1,8 +1,15 @@
 #include <stdio.h>
 #include <assert.h>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
+#include <fstream>
+
+#define USE_PULSE_AUDIO 1
+
+#ifdef USE_PULSE_AUDIO
 #include <pulse/pulseaudio.h>
+#endif
 
 #include "wavemap.h"
 #include "number2words.h"
@@ -10,12 +17,13 @@
 #define FORMAT PA_SAMPLE_U8
 #define RATE 44100
 
+WaveMap wavemap;
+
+#ifdef USE_PULSE_AUDIO
 void context_state_cb(pa_context* context, void* mainloop);
 void stream_state_cb(pa_stream *s, void *mainloop);
 void stream_success_cb(pa_stream *stream, int success, void *userdata);
 void stream_write_cb(pa_stream *stream, size_t requested_bytes, void *userdata);
-
-WaveMap wavemap;
 
 int startPlay() {
     pa_threaded_mainloop *mainloop;
@@ -123,27 +131,86 @@ void stream_write_cb(
 void stream_success_cb(pa_stream *stream, int success, void *userdata) {
     return;
 }
+#endif
 
 int main(int argc, char *argv[]) {
     WaveHeader hdr;
     wavemap.loadFiles("wav/", ".wav");
-    std::cerr << wavemap.toString();
+    // std::cerr << wavemap.toString();
 	
     // startPlay();
     
     // Play until we get a character
     // getc(stdin);
 
-    for (float f = 31.0; f <= 38.0; f += 0.1) {
+    /*
+    for (double f = 31.1; f < 31.3; f += 0.1) {
         wavemap.say(f, 1);
     }
+    */
 
-    char buffer[1024];
-    size_t ofs = 0;
-    for (int i = 0; i <= 100000; i++) {
-        bool eof;
-        wavemap.get(eof, &buffer, ofs, sizeof(buffer));
+    wavemap.say(35.1, 1);
+    wavemap.say(32.2, 1);
+
+//   wavemap.say(1, 0);
+    /*
+    std::cerr << "has sentence: " << wavemap.hasQueuedSentence() 
+        << ", sentence: ";
+
+    const SENTENCE *sentence(wavemap.getSentence());
+    for (SENTENCE::const_iterator s(sentence->begin()); s != sentence->end(); s++) {
+        std::cerr << std::setw(6) << *s << " ";
     }
+    std::cerr << ", sentences: " << std::endl;
+        
+    const SENTENCES *sentences(wavemap.getSentences());
+    for (SENTENCES::const_iterator ss(sentences->begin()); ss != sentences->end(); ss++) {
+        for (SENTENCE::const_iterator s(ss->begin()); s != ss->end(); s++) {
+            std::cerr << std::setw(6) << *s << " ";
+        }
+        std::cerr << std::endl;
+    }
+    */
+    char buffer[1024];
+
+    // calc size
+    size_t sz = 0;
+    size_t keysofs = 0;
+    for (int i = 0; i <= 90; i++) {
+        sz += wavemap.get(keysofs, &buffer, sizeof(buffer));
+    }
+    std::cerr << "size: " << sz 
+        << ", header: " << sizeof(WaveHeader) 
+        << ", total: " << sz + sizeof(WaveHeader) 
+        << std::endl;
+
+    // again
+    keysofs = 0;
+    /*
+    for (double f = 31.1; f < 31.3; f += 0.1) {
+        wavemap.say(f, 1);
+    }
+    */
+   
+   wavemap.say(35.1, 1);
+   wavemap.say(32.2, 1);
+   
+//  wavemap.say(1, 0);
+
+    std::ofstream f("out.wav", std::ios_base::binary | std::ios_base::out);
+    wavemap.header.dataBytes = sz;
+    wavemap.header.wavSize = sz + sizeof(WaveHeader) - 8;
+    f.write((const char *) &wavemap.header, sizeof(WaveHeader));
+
+    std::cerr << "----" << std::endl;
+    for (int i = 0; i <= 90; i++) {
+        size_t sz = wavemap.get(keysofs, &buffer, sizeof(buffer));
+        f.write((const char *) &buffer, sz);
+        std::cerr << "written bytes: " << sz << std::endl;
+    }
+    f.close();
+
+
     /*
     std::vector<int> keys;
     uint64_t numbers[] = { 18446744073709551615U };
