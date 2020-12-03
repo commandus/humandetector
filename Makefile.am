@@ -3,7 +3,10 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CXXFLAGS=-std=c++11 -O0
 
 commoncppflags = -Ithird_party
-GEN = 
+GEN = gen/waves.h
+
+$(GEN): Makefile
+	tools/mkwav2code.sh	
 
 #
 #	Exclude generated sources from distribution
@@ -22,7 +25,8 @@ nobase_dist_include_HEADERS = \
 	platform.h utiltty.h utildate.h util-cmd.h utilstring.h \
 	config-filename.h strptime.h wt-sigur.h \
 	third_party/argtable3/argtable3.h \
-	errlist.h daemonize.h wavemap.h number2words.h
+	errlist.h daemonize.h wavemap.h number2words.h \
+	waves.h
 
 commonlibs = -L/usr/local/lib 
 
@@ -75,7 +79,8 @@ say_number_SOURCES = \
 	config-filename.cpp daemonize.cpp \
 	util-cmd.cpp utilstring.cpp \
 	third_party/argtable3/argtable3.c \
-	number2words.cpp 
+	number2words.cpp \
+	$(GEN)
 say_number_LDADD = $(commonlibs) -lpulse
 say_number_CPPFLAGS = $(commoncppflags) -D_REENTRANT
 
@@ -86,3 +91,17 @@ configdir = $(datadir)
 dist_config_DATA = \
    autogen.sh CMakeLists.txt CODE_OF_CONDUCT.md CONTRIBUTING.md COPYING HISTORY LICENSE README.md TODO \
    third_party/argtable3/README
+
+check_PROGRAMS = number-in-words number2wav
+number_in_words_SOURCES = \
+	tests/number-in-words.cpp number2words.cpp
+number_in_words_LDADD =
+number_in_words_CPPFLAGS =
+
+number2wav_SOURCES = \
+	tests/number2wav.cpp number2words.cpp wavemap.cpp \
+	utilstring.cpp
+number2wav_LDADD =
+number2wav_CPPFLAGS =
+
+TESTS = $(check_PROGRAMS)

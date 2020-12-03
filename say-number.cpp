@@ -14,9 +14,6 @@
 #include "wavemap.h"
 #include "number2words.h"
 
-#define FORMAT PA_SAMPLE_U8
-#define RATE 44100
-
 WaveMap wavemap;
 
 #ifdef USE_PULSE_AUDIO
@@ -58,12 +55,15 @@ int startPlay() {
 
     // Create a playback stream
     pa_sample_spec sample_specifications;
-    sample_specifications.format = FORMAT;
-    sample_specifications.rate = RATE;
-    sample_specifications.channels = 2;
+    sample_specifications.format = wavemap.header.get_pa_sample_format();
+    sample_specifications.rate = wavemap.header.sampleRate;
+    sample_specifications.channels = wavemap.header.numChannels;
 
     pa_channel_map map;
-    pa_channel_map_init_stereo(&map);
+    if (wavemap.header.numChannels == 1)
+        pa_channel_map_init_mono(&map);
+    else
+        pa_channel_map_init_stereo(&map);
 
     stream = pa_stream_new(context, "Playback numbers", &sample_specifications, &map);
     pa_stream_set_state_callback(stream, stream_state_cb, mainloop);
@@ -121,7 +121,6 @@ void stream_write_cb(
 			bytes_to_fill = bytes_remaining;
 
         pa_stream_begin_write(stream, (void**) &buffer, &bytes_to_fill);
-
         wavemap.next(buffer, bytes_to_fill);
         pa_stream_write(stream, buffer, bytes_to_fill, NULL, 0LL, PA_SEEK_RELATIVE);
         bytes_remaining -= bytes_to_fill;
@@ -135,95 +134,13 @@ void stream_success_cb(pa_stream *stream, int success, void *userdata) {
 
 int main(int argc, char *argv[]) {
     WaveHeader hdr;
-    wavemap.loadFiles("wav/", ".wav");
-    // std::cerr << wavemap.toString();
-	
-    // startPlay();
-    
-    // Play until we get a character
-    // getc(stdin);
-
-    /*
-    for (double f = 31.1; f < 31.3; f += 0.1) {
-        wavemap.say(f, 1);
-    }
-    */
+    // wavemap.loadFiles("wav/", ".wav");
+    wavemap.loadResources();
 
     wavemap.say(35.1, 1);
     wavemap.say(32.2, 1);
 
-//   wavemap.say(1, 0);
-    /*
-    std::cerr << "has sentence: " << wavemap.hasQueuedSentence() 
-        << ", sentence: ";
-
-    const SENTENCE *sentence(wavemap.getSentence());
-    for (SENTENCE::const_iterator s(sentence->begin()); s != sentence->end(); s++) {
-        std::cerr << std::setw(6) << *s << " ";
-    }
-    std::cerr << ", sentences: " << std::endl;
-        
-    const SENTENCES *sentences(wavemap.getSentences());
-    for (SENTENCES::const_iterator ss(sentences->begin()); ss != sentences->end(); ss++) {
-        for (SENTENCE::const_iterator s(ss->begin()); s != ss->end(); s++) {
-            std::cerr << std::setw(6) << *s << " ";
-        }
-        std::cerr << std::endl;
-    }
-    */
-    char buffer[1024];
-
-    // calc size
-    size_t sz = 0;
-    size_t keysofs = 0;
-    for (int i = 0; i <= 90; i++) {
-        sz += wavemap.get(keysofs, &buffer, sizeof(buffer));
-    }
-    std::cerr << "size: " << sz 
-        << ", header: " << sizeof(WaveHeader) 
-        << ", total: " << sz + sizeof(WaveHeader) 
-        << std::endl;
-
-    // again
-    keysofs = 0;
-    /*
-    for (double f = 31.1; f < 31.3; f += 0.1) {
-        wavemap.say(f, 1);
-    }
-    */
-   
-   wavemap.say(35.1, 1);
-   wavemap.say(32.2, 1);
-   
-//  wavemap.say(1, 0);
-
-    std::ofstream f("out.wav", std::ios_base::binary | std::ios_base::out);
-    wavemap.header.dataBytes = sz;
-    wavemap.header.wavSize = sz + sizeof(WaveHeader) - 8;
-    f.write((const char *) &wavemap.header, sizeof(WaveHeader));
-
-    std::cerr << "----" << std::endl;
-    for (int i = 0; i <= 90; i++) {
-        size_t sz = wavemap.get(keysofs, &buffer, sizeof(buffer));
-        f.write((const char *) &buffer, sz);
-        std::cerr << "written bytes: " << sz << std::endl;
-    }
-    f.close();
-
-
-    /*
-    std::vector<int> keys;
-    uint64_t numbers[] = { 18446744073709551615U };
-    for (int i = 0; i < sizeof(numbers) / sizeof(uint64_t); i++) {
-        keys.clear();
-        std::cerr << numbers[i] << ":\t" << number2stringRU(numbers[i]) << std::endl;
-
-        std::vector<int32_t> codes;
-        number2codeRU(codes, numbers[i]);
-        for (std::vector<int32_t>::const_iterator it(codes.begin()); it < codes.end(); ++it) {
-            std::cerr << *it << std::endl;
-        }
-        std::cerr << std::endl;
-    }
-    */
+    startPlay();
+    std::string c;
+    std::cin >> c;
 }

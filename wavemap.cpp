@@ -5,12 +5,44 @@
 #include "wavemap.h"
 #include "utilstring.h"
 #include "number2words.h"
+#include "gen/waves.h"
 
-#define DEBUG 1
+// #define DEBUG 1
+
+pa_sample_format WaveHeader::get_pa_sample_format() {
+	switch (bitDepth)
+	{
+	case 8:
+		return PA_SAMPLE_U8;
+	case 16:
+		return PA_SAMPLE_S16LE;
+	case 24:
+		return PA_SAMPLE_S24LE;
+	case 32:
+	    return PA_SAMPLE_FLOAT32LE;
+	default:
+		return PA_SAMPLE_INVALID;
+	}
+}
 
 WaveMap::WaveMap()
-	: hasSentence(false), sentenceofs(0)
+	: hasSentence(false), sentenceofs(0), mKeysOfs(0)
 {
+}
+
+bool WaveMap::putResource(
+	int32_t key,
+	const void *data,
+	uint16_t size,
+	WaveHeader *header
+) {
+	if (size < sizeof(WaveHeader))
+		return false;
+	if (header) {
+		memmove(header, data, sizeof(WaveHeader));
+	}
+	mMap[key] = std::string((const char *) data + sizeof(WaveHeader), size - sizeof(WaveHeader));
+	return true;
 }
 
 bool WaveMap::put(
@@ -20,16 +52,13 @@ bool WaveMap::put(
 ) {
 	bool r = false;
 	std::string s = file2string(filename.c_str());
+	if (s.size() < sizeof(WaveHeader))
+		return false;
 	if (header) {
-		if (s.size() >= sizeof(WaveHeader)) {
-			memmove(header, s.c_str(), sizeof(WaveHeader));
-		}
+		memmove(header, s.c_str(), sizeof(WaveHeader));
 	}
-	if (s.size() >= sizeof(WaveHeader)) {
-		mMap[key] = s.substr(sizeof(WaveHeader));
-		r = true;
-	}
-	return r;
+	mMap[key] = s.substr(sizeof(WaveHeader));
+	return true;
 }
 
 bool WaveMap::put(
@@ -212,12 +241,24 @@ size_t WaveMap::get(
 
 std::string WaveMap::toString() {
 	std::stringstream ss;
+	ss
+        << "channels: " << header.numChannels
+        << ", byte rate: " << header.byteRate
+        << ", bit depth: " << header.bitDepth
+        << ", sample rate: " << header.sampleRate
+        << ", sample alignment: " << header.sampleAlignment
+        << std::endl;
 	for (std::map<int32_t, std::string>::const_iterator it(mMap.begin()); it != mMap.end(); ++it) {
 		ss << it->first << ": " << it->second.size() << std::endl;
 	}
 	return ss.str();	
 }
 
+void WaveMap::loadResources() {
+	for (int i = 0; i < sizeof(RES_WAVE) / sizeof(struct WAVE_RESOURCE); i++) {
+		putResource(RES_WAVE[i].code, RES_WAVE[i].data, RES_WAVE[i].size, &header);
+	}
+}
 
 void WaveMap::loadFiles(
 	const std::string &prefix,
@@ -249,13 +290,7 @@ void WaveMap::next(
 	void *buffer,
 	size_t size
 ) {
-	uint8_t *b = (uint8_t *) buffer;
-	if (!hasSentence) {
-		if (!nextSentence()) {
-			copyNoise(buffer, 0, size);
-			return;
-		}
-	}
+    get(mKeysOfs, buffer, size);
 }
 
 void WaveMap::say(
