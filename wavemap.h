@@ -4,10 +4,13 @@
 #include <deque>
 #include <mutex>
 
+#include <pulse/sample.h>
+
 /**
  * @see https://gist.github.com/Jon-Schneider/8b7c53d27a7a13346a643dac9c19d34f
  */
-typedef struct WaveHeader {
+class WaveHeader {
+public:
     // RIFF Header
     char riffHeader[4]; 	// Contains "RIFF"
     int wavSize; 			// Size of the wav portion of the file, which follows the first 8 bytes. File size - 8
@@ -27,8 +30,8 @@ typedef struct WaveHeader {
     char dataHeader[4];		// Contains "data"
     int dataBytes;			// Number of bytes in data. Number of samples * num_channels * sample byte size
     // uint8_t bytes[]; 	// Remainder of wave file is bytes
-} WaveHeader;
-
+	pa_sample_format get_pa_sample_format();
+};
 
 class SENTENCE {
 	public:
@@ -52,6 +55,7 @@ private:
 	bool hasSentence;
 	SENTENCE sentence;	// sentence to play
 	size_t sentenceofs;
+	size_t mKeysOfs;
 
 	size_t copyKey(
 		int32_t key,
@@ -84,6 +88,12 @@ protected:
 public:
 	WaveHeader header;
 	WaveMap();
+	bool putResource(
+		int32_t key,
+		const void *data,
+		uint16_t size,
+		WaveHeader *header
+	);
 	bool put(
 		int32_t key,
 		const std::string &filename,
@@ -118,6 +128,7 @@ public:
 		size_t size
 	);
 	std::string toString();
+	void loadResources();
 	void loadFiles(
 		const std::string &prefix,
 		const std::string &suffix
