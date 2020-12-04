@@ -464,3 +464,8 @@ number-in-words служит для проверки выборав слов д�
 Зависимости
 
 - libmysqlclient-dev
+- libpulse-dev
+
+```
+sudo apt-get install libmysqlclient-dev libpulse-dev
+```

@@ -143,6 +143,7 @@ int run (
       strmout << line << " --card " << cardno << " --timein " << t << std::endl;
       strmout.flush();
     }
+    return 0;
 }
 
 UsbKeyboardOptions options;
