@@ -56,6 +56,7 @@ private:
 	SENTENCE sentence;	// sentence to play
 	size_t sentenceofs;
 	size_t mKeysOfs;
+	bool mNothingToSay;
 
 	size_t copyKey(
 		int32_t key,
@@ -70,13 +71,6 @@ private:
 		size_t size
 	);
 
-	bool isLast(
-		const SENTENCE &keys,
-		size_t &keysofs,
-		void *buffer,
-		size_t &ofs,
-		size_t size
-	);
 	void calcSizes(
 		SENTENCE &value
 	);
@@ -151,4 +145,5 @@ public:
 	const SENTENCE* getSentence() const;
 	const SENTENCES* getSentences() const;
 	bool hasQueuedSentence() const;
+	bool nothingToSay() const;
 };

@@ -68,6 +68,7 @@ class DetectorOptions {
     int maxT;
     int minT;
     double emissivityK;
+    double correction;
     bool repeatadly;
     bool waitStdin;
     std::string logfilename;
@@ -78,7 +79,7 @@ class DetectorOptions {
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
       printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
-      maxT(0), minT(0), emissivityK(0.92), repeatadly(false), waitStdin(false),
+      maxT(0), minT(0), emissivityK(0.92), correction(0.0), repeatadly(false), waitStdin(false),
       logfilename(""), logstream(NULL)
     {
     }
@@ -166,6 +167,7 @@ int parseCmd
   struct arg_int *a_t0 = arg_int0("l", "t0", "<number>", "lo temperature threshold, C. Default 32");
   struct arg_int *a_t1 = arg_int0("h", "t1", "<number>", "hi temperature threshold, C. Default 42");
   struct arg_str *a_emissivity = arg_str0("e", "emissivity", "<float>", "emissivity coefficient 0..1, default " DEF_EMISSIVITY_K "");
+  struct arg_str *a_correction = arg_str0("c", "correction", "<float>", "correction degrees, default 0.0");
   // time window
   struct arg_int *a_window = arg_int0("s", "seconds", "<number>", "Default 1");
   // delay
@@ -184,7 +186,7 @@ int parseCmd
 
 	void* argtable[] = { 
 		a_path, a_timeout, a_repeatadly, a_wait_stdin,
-    a_t0, a_t1, a_window,
+    a_t0, a_t1, a_emissivity, a_correction, a_window,
     a_degrees, a_mode, a_printMaxOnly, a_reconnect, a_timeFormat,
     a_delay, a_logfilename, a_verbosity, a_help, a_end 
 	};
@@ -266,12 +268,15 @@ int parseCmd
   }
 
   detectorOptions.verbosity = a_verbosity->count;
-
-  
+ 
   if (a_emissivity->count) {
     detectorOptions.emissivityK = atof(*a_emissivity->sval);
   } else {
     detectorOptions.emissivityK = DEF_EMISSIVITY_COEF;
+  }
+
+  if (a_correction->count) {
+    detectorOptions.correction = atof(*a_correction->sval);
   }
 
   if (a_t0->count) {
@@ -437,16 +442,16 @@ static std::string getStartTimeStamp(
 static int calcT(
   int temperatureSensor100K,
   int temperatureBackground100K,
-  double &emissivityK
+  double &emissivityK,
+  double correction
 )
 {
   double temperatureSensor = temperatureSensor100K / 100.0;
   double temperatureBackground = temperatureBackground100K / 100.0;
-  return (int) round( 100. * sqrt(sqrt(
-          (temperatureSensor * temperatureSensor * temperatureSensor * temperatureSensor
-                  - (1 - emissivityK) * temperatureBackground * temperatureBackground * temperatureBackground * temperatureBackground)
-                  / emissivityK
-  )));
+  return (int) round(100. * (correction + sqrt(sqrt(
+    (temperatureSensor * temperatureSensor * temperatureSensor * temperatureSensor
+    - (1 - emissivityK) * temperatureBackground * temperatureBackground * temperatureBackground * temperatureBackground) / emissivityK
+  ))));
 }
 
 static void putTemperature(
@@ -454,7 +459,7 @@ static void putTemperature(
   int temperatureK100,
   int temperatureMinK100
 ) {
-  int t = (calcT(temperatureK100, temperatureMinK100, options.emissivityK) - 27315);
+  int t = (calcT(temperatureK100, temperatureMinK100, options.emissivityK, options.correction) - 27315);
   int tir;
   int tmin;
   switch (options.degrees) {

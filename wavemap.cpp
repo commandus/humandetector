@@ -26,7 +26,7 @@ pa_sample_format WaveHeader::get_pa_sample_format() {
 }
 
 WaveMap::WaveMap()
-	: hasSentence(false), sentenceofs(0), mKeysOfs(0)
+	: hasSentence(false), sentenceofs(0), mKeysOfs(0), mNothingToSay(false)
 {
 }
 
@@ -97,6 +97,7 @@ size_t WaveMap::copyKey(
 	size_t ofs,
 	size_t size
 ) {
+	mNothingToSay = false;
 	size_t r = 0;
 	int sz = mMap[key].size() - keyofs;
 	if (sz <= 0)
@@ -129,18 +130,9 @@ void WaveMap::copyNoise(
 	size_t ofs,
 	size_t size
 ) {
+	mNothingToSay = true;
 	if (ofs < size)
 		memset(((char *) buffer) + ofs, 0, size - ofs);	///< TODO add comfort noise
-}
-
-bool WaveMap::isLast(
-	const SENTENCE &keys,
-	size_t &keysofs,
-	void *buffer,
-	size_t &ofs,
-	size_t size
-) {
-
 }
 
 size_t WaveMap::get(
@@ -382,4 +374,12 @@ const SENTENCES* WaveMap::getSentences() const {
 
 bool WaveMap::hasQueuedSentence() const {
 	return hasSentence;
+}
+
+bool WaveMap::nothingToSay() const {
+	if (hasSentence)
+		return false;
+	if (sentences.size())
+		return false;
+	return mNothingToSay;
 }
