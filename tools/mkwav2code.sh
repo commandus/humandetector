@@ -1,5 +1,7 @@
 #!/bin/bash
 OFN=gen/waves.h
+mkdir -p gen
+touch $OFN
 DT=`date`
 cat <<EOT > $OFN
 /*
