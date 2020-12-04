@@ -25,8 +25,7 @@ nobase_dist_include_HEADERS = \
 	platform.h utiltty.h utildate.h util-cmd.h utilstring.h \
 	config-filename.h strptime.h wt-sigur.h \
 	third_party/argtable3/argtable3.h \
-	errlist.h daemonize.h wavemap.h number2words.h \
-	waves.h
+	errlist.h daemonize.h wavemap.h number2words.h
 
 commonlibs = -L/usr/local/lib 
 
