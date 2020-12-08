@@ -203,6 +203,8 @@ int run (
           // try to connect to the database
           options.disconnect();
           options.reconnect();
+          // try again
+          cardno = options.getLastSigurEmployee(t);
         }
       }
       strmout << line << " --card " << cardno << " --timein " << t << std::endl;

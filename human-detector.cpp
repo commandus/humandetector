@@ -640,7 +640,8 @@ static void readDevice(
 
     int t;
     size_t sz = parseObjectTemp(t, buf);
-    if (sz > 0) {
+    // BUGBUG after long time wait tmin = 0K
+    if ((sz > 0) && (t > 0)) {
       std::string remains(buf.str().c_str() + sz, buf.str().size() - sz);
       buf.clear(); // Clear state flags.
       buf.str(remains);

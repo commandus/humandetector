@@ -290,7 +290,7 @@ static void run (
   std::ostream &strmout,
   PutDbOptions &options
 ) {
-  // thermemeter measurement db connection options
+  // thermometer measurement db connection options
   
   struct arg_int *a_gateid = arg_int0("g", "gate", "<number>", NULL);
   struct arg_int *a_userid = arg_int0("c", "card", "<number>", NULL);
