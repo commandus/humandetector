@@ -9,7 +9,7 @@
 #include <syslog.h>
 #include <sstream>
 #define	SYSLOG(msg) { syslog (LOG_ALERT, "%s", msg); }
-#define OPENSYSLOG() { setlogmask (LOG_UPTO(LOG_NOTICE)); openlog("humandetector", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1); }
+#define OPENSYSLOG() { setlogmask (LOG_UPTO(LOG_NOTICE)); openlog("udp-splitter", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1); }
 #define CLOSESYSLOG() closelog();
 #endif
 
