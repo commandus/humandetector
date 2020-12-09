@@ -1,6 +1,6 @@
 SUBDIRS = .
 ACLOCAL_AMFLAGS = -I m4
-AM_CXXFLAGS=-std=c++11 -O0
+AM_CXXFLAGS=-std=c++11
 
 commoncppflags = -Ithird_party
 GEN = gen/waves.h
