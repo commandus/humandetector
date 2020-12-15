@@ -71,6 +71,7 @@ class DetectorOptions {
     double correction;
     bool repeatadly;
     bool waitStdin;
+    bool calibrateCorrection;
     std::string logfilename;
     std::ostream *logstream;
 
@@ -79,7 +80,7 @@ class DetectorOptions {
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
       printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
-      maxT(0), minT(0), emissivityK(0.92), correction(0.0), repeatadly(false), waitStdin(false),
+      maxT(0), minT(0), emissivityK(0.92), correction(0.0), repeatadly(false), waitStdin(false), calibrateCorrection(false),
       logfilename(""), logstream(NULL)
     {
     }
@@ -167,7 +168,7 @@ int parseCmd
   struct arg_int *a_t0 = arg_int0("l", "t0", "<number>", "lo temperature threshold, C. Default 32");
   struct arg_int *a_t1 = arg_int0("h", "t1", "<number>", "hi temperature threshold, C. Default 42");
   struct arg_str *a_emissivity = arg_str0("e", "emissivity", "<float>", "emissivity coefficient 0..1, default " DEF_EMISSIVITY_K "");
-  struct arg_str *a_correction = arg_str0("c", "correction", "<float>", "correction degrees, default 0.0");
+  struct arg_str *a_correction = arg_str0("c", "correction", "<calibtate|float>", "correction degrees, default 0.0. Set to \"calibrate\" to calculate correction");
   // time window
   struct arg_int *a_window = arg_int0("s", "seconds", "<number>", "Default 1");
   // delay
@@ -276,7 +277,10 @@ int parseCmd
   }
 
   if (a_correction->count) {
-    detectorOptions.correction = atof(*a_correction->sval);
+    if (strcmp(*a_correction->sval, "calibrate") == 0)
+      detectorOptions.calibrateCorrection = true;
+    else 
+      detectorOptions.correction = atof(*a_correction->sval);
   }
 
   if (a_t0->count) {
@@ -608,7 +612,6 @@ static void readDevice(
       sendRequestObjectTemperature(options);
       continue;
     }
-
 		
     switch (r)
     {
@@ -666,6 +669,109 @@ static void readDevice(
   }
 }
 
+static double calibrateDevice(
+  DetectorOptions &options
+)
+{
+  if (options.verbosity > 1) {
+    std::cerr << "Checking the difference between the IR sensor and the internal sensor. Do not place objects in front of the sensor!" << std::endl;
+  }
+  int tIRMin = 999999;
+  int tAmbientMax = 0;
+
+  enum MODE saveMode = options.mode;
+  options.mode = MODE_IR;
+
+  int c = 0;
+  int count = 0;
+	std::stringstream buf;
+
+  sendRequestObjectTemperature(options);
+	while (!options.stopped) {
+    int r;
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(options.fd, &fds);
+    timeval w;
+    w.tv_sec = options.timeout;
+    w.tv_usec = 0;
+    if (select(options.fd + 1, &fds, NULL, 0, &w) == 1) {
+      r = read(options.fd, &c, 1);
+    } else {
+      sendRequestObjectTemperature(options);
+      continue;
+    }
+    buf.put(c);
+
+    switch (r)
+    {
+    case -1:  // error
+    case 0:   // EOF
+      // lost everything
+      buf.clear();
+      // try to re-open file
+      if (options.fd) {
+        closeDevice(options.fd);
+      }
+      options.fd = openDevice(options.path, options.timeout);
+      continue;
+    default:
+      break;
+    }
+
+    int t;
+    size_t sz = parseObjectTemp(t, buf);
+    if ((sz > 0) && (t > 0)) {
+      std::string remains(buf.str().c_str() + sz, buf.str().size() - sz);
+      buf.clear(); // Clear state flags.
+      buf.str(remains);
+
+      if (options.verbosity > 2) {
+        float t1;
+        switch (options.degrees) {
+        case DEG_C:
+          t1 = (t - 27315) / 100.;
+          break;
+        default:
+          t1 = t / 100.;
+        }
+        std::cerr
+          << (options.mode == MODE_IR ? ("IR sensor: ") : ("Ambient: ")) << "\t"
+          << std::fixed << std::setprecision(1) << t1 << std::endl;
+      }
+      if (count > 6) {
+        break;  
+      } else {
+        count++;
+      }
+
+      // flip-flop
+      if (options.mode == MODE_AMBIENT) {
+        if (t > tAmbientMax)
+          tAmbientMax = t;
+        options.mode = MODE_IR;
+      } else {
+        if (t < tIRMin)
+          tIRMin = t;
+        options.mode = MODE_AMBIENT;
+      }
+      sendRequestObjectTemperature(options);
+    }
+  }
+  double tDiff = (tAmbientMax - tIRMin) / 100.;
+  if (options.verbosity > 1) {
+    std::cerr << std::fixed << std::setprecision(1) 
+      << std::fixed << std::setprecision(2)
+      << "IR: " << tIRMin / 100. << "\t"
+      << "Ambient: " << tAmbientMax / 100. << "\t"
+      "calibrate correction: " << tDiff << "\t"
+      << std::endl;
+  }
+  options.mode = saveMode;
+  options.stopped = false;
+  return tDiff;
+}
+
 int main(
   int argc,
 	char* argv[]
@@ -692,6 +798,14 @@ int main(
   options.temperature0 = (options.temperature0 * 100) + 27315;
   options.temperature1 = (options.temperature1 * 100) + 27315;
 
+  if (options.calibrateCorrection) {
+    double c = calibrateDevice(options);
+    if (c > 10 || c < -10) {
+      std::cerr << ERR_CALIBRATION_DIFF_TOO_BIG << std::endl;
+      exit(ERR_CODE_CALIBRATION_DIFF_TOO_BIG);
+    }
+    options.correction = c;
+  }
   readDevice(options);
 
   closeDevice(options.fd);

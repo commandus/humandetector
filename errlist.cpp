@@ -1,7 +1,7 @@
 #include <string.h>
 #include "errlist.h"
 
-#define ERR_COUNT 15
+#define ERR_COUNT 16
 
 static const char* errlist[ERR_COUNT] = {
   ERR_COMMAND_LINE,
@@ -18,7 +18,8 @@ static const char* errlist[ERR_COUNT] = {
   ERR_DB_EMPTY,
   ERR_WRONG_FILE,
   ERR_INVALID_PAR_DELAY,
-  ERR_INVALID_PAR_LOG_FILE
+  ERR_INVALID_PAR_LOG_FILE,
+  ERR_CALIBRATION_DIFF_TOO_BIG
 };
 
 const char *strerror_humandetector(
