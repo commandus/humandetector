@@ -38,7 +38,8 @@ enum MODE {
   MODE_IR = 0,
   MODE_AMBIENT = 1,
   MODE_TICK = 2,
-  MODE_FILE = 3
+  MODE_ERR = 3,
+  MODE_FILE = 4
 };
 
 #define DEF_TEMPERATURE_THRESHOLD_C_MIN 30
@@ -79,7 +80,7 @@ class DetectorOptions {
       fd(0), stopped(false), path(""), timeout(1), temperature0(DEF_TEMPERATURE_THRESHOLD_C_MIN), temperature1(DEF_TEMPERATURE_THRESHOLD_C_MAX), dt(1),
       degrees(DEG_C), delay(0), verbosity(0), currentTime(0), startTime(0), 
       sentTime(0), sentTemperature(0), 
-      printMaxOnly(false), reconnect(false), mode(MODE_IR), timeFormat(""),
+      printMaxOnly(false), reconnect(true), mode(MODE_IR), timeFormat(""),
       maxT(0), minT(0), emissivityK(0.92), correction(0.0), repeatadly(false), waitStdin(false), calibrateCorrection(false),
       logfilename(""), logstream(NULL)
     {
@@ -174,9 +175,9 @@ int parseCmd
   // delay
   struct arg_int *a_delay = arg_int0("y", "delay", "<ms>", "delay to read, C. Default 0");
   struct arg_str *a_degrees = arg_str0("g", "degrees", "K or C", "K- Kelvin, C- Celcius (default)");
-  struct arg_str *a_mode = arg_str0("m", "mode", "i, a, t, f", "ir- infrared sensor, ambient- internal sensor, tick- counter value, file- read from the file");
+  struct arg_str *a_mode = arg_str0("m", "mode", "i, a, t, e, f", "ir- infrared sensor, ambient- internal sensor, tick- counter value, err- last error, file- read from the file");
   struct arg_lit *a_printMaxOnly = arg_lit0("1", NULL, "output max temperature only(no output every 1s when temperature growing)");
-  struct arg_lit *a_reconnect = arg_lit0("r", "reconnect", "re-open COM port on error");
+  struct arg_lit *a_no_reconnect = arg_lit0("N", "no-reconnect", "do not re-open COM port on error");
   struct arg_str *a_timeFormat = arg_str0("t", "timeformat", "<format>", "Output time format, e.g. \"" DEF_TIME_FORMAT "\". Default prints seconds since Unix epoch ");
 
   struct arg_str *a_logfilename = arg_str0(NULL, "logfile", "<file>", "time and temperature log file");
@@ -188,7 +189,7 @@ int parseCmd
 	void* argtable[] = { 
 		a_path, a_timeout, a_repeatadly, a_wait_stdin,
     a_t0, a_t1, a_emissivity, a_correction, a_window,
-    a_degrees, a_mode, a_printMaxOnly, a_reconnect, a_timeFormat,
+    a_degrees, a_mode, a_printMaxOnly, a_no_reconnect, a_timeFormat,
     a_delay, a_logfilename, a_verbosity, a_help, a_end 
 	};
 
@@ -236,7 +237,7 @@ int parseCmd
   if (a_mode->count) {
      std::string d = *a_mode->sval;
      if (d.length() > 0) {
-       // i, a, t, f
+       // i, a, t, e, f
        switch (d[0])
        {
        case 'A':
@@ -246,6 +247,10 @@ int parseCmd
        case 'T':
        case 't':
           detectorOptions.mode = MODE_TICK;
+          break;
+       case 'E':
+       case 'e':
+          detectorOptions.mode = MODE_ERR;
           break;
        case 'F':
        case 'f':
@@ -262,7 +267,7 @@ int parseCmd
   }
 
   detectorOptions.printMaxOnly = a_printMaxOnly->count > 0;
-  detectorOptions.reconnect = a_reconnect->count > 0;
+  detectorOptions.reconnect = a_no_reconnect->count == 0;
 
   if (a_timeFormat->count) {
      detectorOptions.timeFormat = *a_timeFormat->sval;
@@ -365,6 +370,9 @@ static size_t sendRequestObjectTemperature(
     break;
   case MODE_TICK:
     c = '2';
+    break;
+  case MODE_ERR:
+    c = '3';
     break;
   case MODE_FILE:
     return 0;
@@ -606,11 +614,18 @@ static void readDevice(
     w.tv_sec = options.timeout;
     w.tv_usec = 0;
     int r;
-    if (select(options.fd + 1, &fds, NULL, 0, &w) == 1) {
-      r = read(options.fd, &c, 1);
-    } else {
-      sendRequestObjectTemperature(options);
-      continue;
+    int rs = select(options.fd + 1, &fds, NULL, 0, &w);
+    switch (rs) {
+      case 1:
+        r = read(options.fd, &c, 1);
+        break;
+      case -1:
+        r = -1;
+        std::cerr << "Error " << errno << ": " << strerror(errno) << std::endl;
+        break;
+      default:
+        sendRequestObjectTemperature(options);
+        continue;
     }
 		
     switch (r)
@@ -619,8 +634,9 @@ static void readDevice(
     case 0:   // EOF
       // lost everything
       buf.clear();
-      // try to re-open file
       if (options.reconnect) {
+        // try to re-open file
+        std::cerr << MSG_RECONNECTING << std::endl;
         if (options.fd) {
           closeDevice(options.fd);
         }

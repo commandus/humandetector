@@ -35,6 +35,7 @@
 #define MSG_INTERRUPTED 				"Interrupted "
 #define MSG_PG_CONNECTED        		"Connected"
 #define MSG_PG_CONNECTING       		"Connecting..."
+#define MSG_RECONNECTING				"Trying to reconnect.." 
 #define MSG_DAEMON_STARTED      		"Start daemon "
 #define MSG_DAEMON_STARTED_1    		". Check syslog."
 #define MSG_WS_TIMEOUT					"Web service time out"
