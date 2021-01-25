@@ -140,6 +140,13 @@
 - put-temperature-db получает температуру, номер карты и записывает в базу данных, затем добавляет  параметр --id <номер записи в БД> 
 - put-temperature-json получает температуру, номер карты и отправляет их в веб сервис 
 
+а в таком
+```
+./human-detector /dev/ttyACM1 | ./sigur-last-card | ./say-number | ./put-temperature-db
+```
+
+- say-number получает температуру, и произносит ее в аудиоустройство
+
 Символ | конвейера в shell'е создает канал (pipe) между stdout первой программы и stdin второй. Поэтому stdin и stdout (с номерами файлов 0 и 1)
 заняты каналом для передачи параметров.
 
@@ -157,6 +164,7 @@ exec 6<&0
 exec 0<&6 6<&-
 exit 0
 ```
+
 
 По окончании pipe файл 6 переименовывается в файл 0 обратно.
 
@@ -407,6 +415,14 @@ New USB device found, idVendor=16d0, idProduct=087e, bcdDevice= 1.00
 New USB device strings: Mfr=1, Product=2, SerialNumber=0
 Product: Digispark Serial
 Manufacturer: digistump.com
+
+Bus 003 Device 054: ID 16d0:087e MCS 
+
+## USB errors
+
+```
+[1298427.724795] cdc_acm 3-5:1.0: failed to set dtr/rts
+```
 
 ## Тесты
 

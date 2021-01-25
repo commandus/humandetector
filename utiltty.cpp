@@ -25,9 +25,7 @@ int openDevice
 	*/
 	int mDevice = open(deviceName.c_str(), flags);
 	
-	if (mDevice == -1) 
-	{
-		perror("Can not open device");
+	if (mDevice == -1) {
 		return -1;
 	}
 

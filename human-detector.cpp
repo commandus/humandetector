@@ -19,6 +19,9 @@
 #define DEF_DEVICE_PATH "/dev/ttyACM0"
 #endif
 
+#define MAX_TIMEOUT_COUNT 10
+#define MAX_RECONNECTS_COUNT 10
+
 #include "argtable3/argtable3.h"
 
 #include "errlist.h"
@@ -382,7 +385,7 @@ static size_t sendRequestObjectTemperature(
   }
   size_t sz = write(options.fd, &c, 1);
   if (options.verbosity > 2) {
-    std::cerr << "Write " << sz << " byte(s) to " << options.path << ": " << c << std::endl;
+    std::cerr << "Write '" << c << "' to " << options.path << ", " << sz << " byte sent" << std::endl;
   }
   return sz;
 }
@@ -606,6 +609,8 @@ static void readDevice(
   options.maxT = 0;
   options.minT = options.temperature1;
   sendRequestObjectTemperature(options);
+  int timeouts = 0;
+  int reconnects = 0;
 	while (!options.stopped) {
     fd_set fds;
     FD_ZERO(&fds);
@@ -616,16 +621,29 @@ static void readDevice(
     int r;
     int rs = select(options.fd + 1, &fds, NULL, 0, &w);
     switch (rs) {
+      case 0:
+        // timeout, device not responds
+        if (options.verbosity > 2) {
+          std::cerr << "Device timeout " << ++timeouts << std::endl;  
+        }
+        if (timeouts >= MAX_TIMEOUT_COUNT) {
+          r = -1;
+          break;
+        } else 
+          continue;
       case 1:
+        timeouts = 0;
+        reconnects = 0;
         r = read(options.fd, &c, 1);
         break;
       case -1:
         r = -1;
         std::cerr << "Error " << errno << ": " << strerror(errno) << std::endl;
         break;
-      default:
-        sendRequestObjectTemperature(options);
-        continue;
+      default:  // impossible
+        std::cerr << "Select returns " << rs << ", errno " << errno << ": " << strerror(errno) << std::endl;
+        std::cerr << "Error " << ERR_CODE_COM_TROUBLE << ": " << strerror_humandetector(ERR_CODE_COM_TROUBLE) << std::endl;
+        exit(ERR_CODE_COM_TROUBLE);
     }
 		
     switch (r)
@@ -635,12 +653,21 @@ static void readDevice(
       // lost everything
       buf.clear();
       if (options.reconnect) {
+        if (reconnects > MAX_RECONNECTS_COUNT) {
+          std::cerr << "Too many unsuccessful tries to re-open COM port" << std::endl;
+          exit(ERR_CODE_COM_TROUBLE);
+        }
         // try to re-open file
         std::cerr << MSG_RECONNECTING << std::endl;
         if (options.fd) {
           closeDevice(options.fd);
         }
         options.fd = openDevice(options.path, options.timeout);
+        if (options.fd == -1) {
+          std::cerr << "Error " << ERR_CODE_OPEN_DEVICE << ": " << ERR_OPEN_DEVICE << std::endl;
+          exit(ERR_CODE_OPEN_DEVICE);
+        }
+        reconnects++;
         continue;
       } else {
         // exit gracefully
@@ -651,6 +678,12 @@ static void readDevice(
     default:
       if (options.verbosity > 2) {
         std::cerr << (char) c;
+        /*
+        if (isalnum(c))
+          std::cerr << (char) c;
+        else
+          std::cerr << "0x" << std::hex << std::setfill('0') << std::setw(2) << c << std::dec;
+        */
       }
       break;
     }

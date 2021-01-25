@@ -15,6 +15,7 @@
 #define ERR_CODE_INVALID_PAR_DELAY		-513
 #define ERR_CODE_INVALID_PAR_LOG_FILE	-514
 #define ERR_CODE_CALIBRATION_DIFF_TOO_BIG -515
+#define ERR_CODE_COM_TROUBLE			-516
 
 #define ERR_COMMAND_LINE        		"Wrong parameter(s)"
 #define ERR_OPEN_DEVICE         		"Error open device "
@@ -32,6 +33,7 @@
 #define ERR_INVALID_PAR_DELAY			"Delay must be great or equil 0."
 #define ERR_INVALID_PAR_LOG_FILE		"Can't open log file "
 #define ERR_CALIBRATION_DIFF_TOO_BIG	"Calibration temperatures dirfference is too big"
+#define ERR_COM_TROUBLE					"Some problems with COM interface"
 #define MSG_INTERRUPTED 				"Interrupted "
 #define MSG_PG_CONNECTED        		"Connected"
 #define MSG_PG_CONNECTING       		"Connecting..."

@@ -60,7 +60,7 @@ int parseCmd
   // device path
     struct arg_str *a_wav_files_path = arg_str0("w", "waves", "<path>", "Default none");
     struct arg_int *a_precision = arg_int0("p", "precision", "<0..6>", "Default 1");
-    struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin");
+    struct arg_lit *a_repeatadly = arg_lit0("R", "no-read", "do not read lines from stdin (say and exit)");
     struct arg_lit *a_verbosity = arg_litn("v", "verbose", 0, 3, "Set verbosity level");
     struct arg_int *a_t = arg_int0("t", "temperature", "<number>", NULL);
 	struct arg_lit *a_help = arg_lit0("?", "help", "Show this help");
